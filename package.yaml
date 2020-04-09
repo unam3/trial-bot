@@ -20,7 +20,10 @@ extra-source-files:
 description:         Please see the README on GitHub at <https://github.com/githubuser/trial-bot#readme>
 
 dependencies:
-- base >= 4.7 && < 5
+- base == 4.13.0.0
+- req == 3.1.0
+- aeson == 1.4.7.1
+- text == 1.2.4.0
 
 library:
   source-dirs: src
@@ -30,6 +33,7 @@ executables:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
+    - -Wall
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
@@ -41,6 +45,7 @@ tests:
     main:                Spec.hs
     source-dirs:         test
     ghc-options:
+    - -Wall
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N

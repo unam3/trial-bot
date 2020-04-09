@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2cfdb1a85762b6aa05f343d815d6b701c72d7c122fb9ca1421e0e2a2a461295d
+-- hash: 8149cd39d336ee3b5830e4af973d61a91e2db3610f12157362ae37ff7f68f94c
 
 name:           trial-bot
 version:        0.1.0.0
@@ -27,13 +27,17 @@ source-repository head
 
 library
   exposed-modules:
+      Bot
       Lib
   other-modules:
       Paths_trial_bot
   hs-source-dirs:
       src
   build-depends:
-      base >=4.7 && <5
+      aeson ==1.4.7.1
+    , base ==4.13.0.0
+    , req ==3.1.0
+    , text ==1.2.4.0
   default-language: Haskell2010
 
 executable trial-bot-exe
@@ -42,9 +46,12 @@ executable trial-bot-exe
       Paths_trial_bot
   hs-source-dirs:
       app
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      aeson ==1.4.7.1
+    , base ==4.13.0.0
+    , req ==3.1.0
+    , text ==1.2.4.0
     , trial-bot
   default-language: Haskell2010
 
@@ -55,8 +62,11 @@ test-suite trial-bot-test
       Paths_trial_bot
   hs-source-dirs:
       test
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      aeson ==1.4.7.1
+    , base ==4.13.0.0
+    , req ==3.1.0
+    , text ==1.2.4.0
     , trial-bot
   default-language: Haskell2010
