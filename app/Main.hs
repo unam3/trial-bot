@@ -5,7 +5,7 @@ import System.Environment (getArgs)
 processArgs :: [String] -> Maybe (String, String, String, Int)
 processArgs [token, helpMsg, repeatMsg, echoRepeatNumber] = let {
     echoRepeatNumberInt = (read echoRepeatNumber :: Int);
-    isInRange n = n > 1 && n < 6;
+    isInRange n = n > 0 && n < 6;
 } in if or [null token, null helpMsg, null repeatMsg, not $ isInRange echoRepeatNumberInt]
     then Nothing
     else Just (token, helpMsg, repeatMsg, echoRepeatNumberInt)
