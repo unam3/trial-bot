@@ -1,7 +1,8 @@
 module Main where
 
 import System.Environment (getArgs)
-import Bot (printUpdates)
+import Bot (printUpdates, cycleUpdate)
+
 
 processArgs :: [String] -> Maybe (String, String, String, Int)
 processArgs [token, helpMsg, repeatMsg, echoRepeatNumberStr] = let {
