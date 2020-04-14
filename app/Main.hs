@@ -18,6 +18,6 @@ main = do
     args <- getArgs
     case args of
         [_, _, _, _] -> case processArgs args of
-            Just args' -> printUpdates args'
+            Just args' -> cycleUpdate args'
             Nothing -> putStrLn "some argument passed from command line is wrong"
         _ -> putStrLn "error: exactly four arguments needed: token, helpMsg, repeatMsg, echoRepeatNumber"

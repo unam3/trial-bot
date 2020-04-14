@@ -31,4 +31,4 @@ printUpdates (token, helpMsg, repeatMsg, echoRepeatNumber) = let {
     liftIO $ print (responseBody v :: Value)
 
 cycleUpdate :: (String, String, String, Int) -> IO ()
-cycleUpdate args = (printUpdates args) `seq` (cycleUpdate args)
+cycleUpdate args = printUpdates args >> cycleUpdate args
