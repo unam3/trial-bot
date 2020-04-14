@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 8149cd39d336ee3b5830e4af973d61a91e2db3610f12157362ae37ff7f68f94c
+-- hash: 4a25ee592b09885e61609d2f9fad6237f4a1db8b30b4f4724e6ed72a360a3c9f
 
 name:           trial-bot
 version:        0.1.0.0
@@ -38,6 +38,7 @@ library
     , base ==4.13.0.0
     , req ==3.1.0
     , text ==1.2.4.0
+    , unordered-containers ==0.2.10.0
   default-language: Haskell2010
 
 executable trial-bot-exe
@@ -53,6 +54,7 @@ executable trial-bot-exe
     , req ==3.1.0
     , text ==1.2.4.0
     , trial-bot
+    , unordered-containers ==0.2.10.0
   default-language: Haskell2010
 
 test-suite trial-bot-test
@@ -69,4 +71,5 @@ test-suite trial-bot-test
     , req ==3.1.0
     , text ==1.2.4.0
     , trial-bot
+    , unordered-containers ==0.2.10.0
   default-language: Haskell2010
