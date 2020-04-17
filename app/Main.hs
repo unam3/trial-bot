@@ -1,7 +1,7 @@
 module Main where
 
 import System.Environment (getArgs)
-import Bot (printUpdates, cycleUpdate)
+import Bot (cycleUpdate)
 
 
 processArgs :: [String] -> Maybe (String, String, String, Int)

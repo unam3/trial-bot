@@ -2,13 +2,14 @@
 {-# LANGUAGE DeriveGeneric     #-}
 
 module Bot
-    ( printUpdates,
+    (
     cycleUpdate
     ) where
 
 import Control.Monad.IO.Class
 import Data.Aeson (FromJSON (parseJSON), ToJSON, Value, Object, Array, (.:), withObject)
 import qualified Data.HashMap.Strict as HM
+import Data.Int (Int32)
 import Data.Text (Text, append, pack)
 import GHC.Generics (Generic)
 import Prelude hiding (id)
@@ -16,7 +17,7 @@ import Network.HTTP.Req
 
 
 newtype RequestJSON = WithOffset {
-    -- offset :: Double,
+    -- offset :: Int32,
     timeout :: Int
 } deriving (Show, Generic)
 
@@ -25,7 +26,7 @@ instance FromJSON RequestJSON
 
 
 newtype Update = Update {
-    update_id :: Double
+    update_id :: Int32
 }  deriving (Show, Generic)
 
 instance ToJSON Update
@@ -46,15 +47,14 @@ instance FromJSON ResponseJSON where
 
 printUpdates :: (String, String, String, Int) -> IO ()
 printUpdates (token, helpMsg, repeatMsg, echoRepeatNumber) = let {
-    -- https://core.telegram.org/bots/api#available-methods
     apiMethod = "getUpdates";
     tokenSection = append ("bot" :: Text) $ pack token;
-    --getResult = (HM.! "result");
--- examples section of http://hackage.haskell.org/package/req-3.1.0/docs/Network-HTTP-Req.html#v:req
-} in runReq defaultHttpConfig $ do
-    response <- req POST (https "api.telegram.org" /: tokenSection /: apiMethod) (ReqBodyJson (WithOffset 200)) jsonResponse mempty
-    --liftIO . print $ getResult (responseBody response :: Object)
-    liftIO $ print (responseBody response :: ResponseJSON)
+    urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
+    body = (ReqBodyJson (WithOffset 20));
+    runReqMonad = req POST urlScheme body jsonResponse mempty >>=
+        (\ response -> liftIO $ print (responseBody response :: ResponseJSON));
+} in runReq defaultHttpConfig runReqMonad
+    
 
 cycleUpdate :: (String, String, String, Int) -> IO ()
 cycleUpdate args = printUpdates args >> cycleUpdate args
