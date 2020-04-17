@@ -17,7 +17,7 @@ import Network.HTTP.Req
 
 newtype RequestJSON = WithOffset {
     -- offset :: Double,
-    tiemout :: Int
+    timeout :: Int
 } deriving (Show, Generic)
 
 instance ToJSON RequestJSON
