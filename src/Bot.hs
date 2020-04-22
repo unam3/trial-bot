@@ -40,7 +40,6 @@ instance FromJSON Update where
 data ResponseJSON = RJSON {
     ok :: Bool,
     result :: [Update]
-    --result :: ByteString
 } deriving (Show, Generic)
 
 instance ToJSON ResponseJSON
@@ -55,7 +54,7 @@ getUpdates (token, helpMsg, repeatMsg, echoRepeatNumber) maybeOffset = let {
     apiMethod = "getUpdates";
     tokenSection = append ("bot" :: Text) $ pack token;
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
-    body = ReqBodyJson (WithoutOffset 20);
+    body = ReqBodyJson $ maybe (WithoutOffset {timeout = 20}) (\ offset -> WithOffset {timeout = 20, offset = offset + 1}) maybeOffset;
     runReqMonad = req POST urlScheme body jsonResponse mempty >>=
         (\ response -> return (responseBody response :: ResponseJSON));
 } in runReq defaultHttpConfig runReqMonad
