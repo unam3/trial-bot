@@ -6,9 +6,7 @@ module Bot
     cycleUpdate
     ) where
 
-import Control.Monad.IO.Class
-import Data.Aeson (FromJSON (parseJSON), ToJSON, Value, Object, Array, (.:), withObject)
-import qualified Data.HashMap.Strict as HM
+import Data.Aeson (FromJSON (parseJSON), ToJSON, (.:), withObject)
 import Data.Int (Int32)
 import Data.Text (Text, append, pack)
 import GHC.Generics (Generic)
