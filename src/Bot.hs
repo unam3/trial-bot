@@ -8,6 +8,7 @@ module Bot
 
 import Data.Aeson (FromJSON (parseJSON), ToJSON, (.:), (.:?), withObject)
 import Data.Int (Int32, Int64)
+import Data.Maybe (isJust)
 import Data.Text (Text, append, pack)
 import GHC.Generics (Generic)
 import Prelude hiding (id)
@@ -39,13 +40,15 @@ instance FromJSON Chat where
         <$> v .: "id"
 
 data Message = Message {
-    chat :: Chat
+    chat :: Chat,
+    text :: Maybe Text
 } deriving (Show, Generic)
 
 instance ToJSON Message
 instance FromJSON Message where
     parseJSON = withObject "Message" $ \v -> Message
         <$> v .: "chat"
+        <*> v .:? "text"
 
 data Update = Update {
     update_id :: Offset,
@@ -86,18 +89,18 @@ getUpdateId rjson = let {
     updates = result rjson;
 } in if null updates then Nothing else Just (update_id $ last updates)
 
-getChatId :: ResponseJSON -> IO (Maybe [ChatID])
-getChatId rjson = let {
+getTextMessages :: ResponseJSON -> IO (Maybe [Message])
+getTextMessages rjson = let {
     updates = result rjson;
 } in return $ if null updates
     then Nothing
-    else Just . fmap (\ (Just msg) -> id $ chat msg) . filter (\ (Just _) -> True) . fmap message $ updates
+    else Just . fmap (\ (Just msg) -> msg) . filter (\ (Just msg) -> isJust $ text msg) $ fmap message updates
 
 cycleUpdate' :: (String, String, String, Int) -> ResponseJSON -> IO ResponseJSON
 cycleUpdate' args rjson = getUpdates args (getUpdateId rjson) >>=
     \ ioRJSON -> print ioRJSON
-    >> getChatId ioRJSON
-    >>= print
+    >> getTextMessages ioRJSON
+    >>= \ textMessages -> print textMessages
     >> cycleUpdate' args ioRJSON
 
 cycleUpdate :: (String, String, String, Int) -> IO ResponseJSON
