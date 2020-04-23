@@ -26,6 +26,10 @@ dependencies:
 - text == 1.2.4.0
 - unordered-containers == 0.2.10.0
 
+ghc-options:
+- -Wall
+- -threaded
+
 library:
   source-dirs: src
 
@@ -34,8 +38,6 @@ executables:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
-    - -Wall
-    - -threaded
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
@@ -46,8 +48,6 @@ tests:
     main:                Spec.hs
     source-dirs:         test
     ghc-options:
-    - -Wall
-    - -threaded
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
