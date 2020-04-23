@@ -6,8 +6,8 @@ module Bot
     cycleUpdate
     ) where
 
-import Data.Aeson (FromJSON (parseJSON), ToJSON, (.:), withObject)
-import Data.Int (Int32)
+import Data.Aeson (FromJSON (parseJSON), ToJSON, (.:), (.:?), withObject)
+import Data.Int (Int32, Int64)
 import Data.Text (Text, append, pack)
 import GHC.Generics (Generic)
 import Prelude hiding (id)
@@ -27,15 +27,36 @@ instance ToJSON RequestJSON
 instance FromJSON RequestJSON
 
 
-newtype Update = Update {
-    update_id :: Offset
-}  deriving (Show, Generic)
+type ChatID = Int64
+
+data Chat = Chat {
+    id :: ChatID
+} deriving (Show, Generic)
+
+instance ToJSON Chat
+instance FromJSON Chat where
+    parseJSON = withObject "Chat" $ \v -> Chat
+        <$> v .: "id"
+
+data Message = Message {
+    chat :: Chat
+} deriving (Show, Generic)
+
+instance ToJSON Message
+instance FromJSON Message where
+    parseJSON = withObject "Message" $ \v -> Message
+        <$> v .: "chat"
+
+data Update = Update {
+    update_id :: Offset,
+    message :: Maybe Message
+} deriving (Show, Generic)
 
 instance ToJSON Update
 instance FromJSON Update where
     parseJSON = withObject "Update" $ \v -> Update
         <$> v .: "update_id"
-
+        <*> v .:? "message"
 
 data ResponseJSON = RJSON {
     ok :: Bool,
@@ -54,7 +75,8 @@ getUpdates (token, helpMsg, repeatMsg, echoRepeatNumber) maybeOffset = let {
     apiMethod = "getUpdates";
     tokenSection = append ("bot" :: Text) $ pack token;
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
-    body = ReqBodyJson $ maybe (WithoutOffset {timeout = 20}) (\ offset -> WithOffset {timeout = 20, offset = offset + 1}) maybeOffset;
+    body = ReqBodyJson $
+        maybe (WithoutOffset {timeout = 20}) (\ offset -> WithOffset {timeout = 20, offset = offset + 1}) maybeOffset;
     runReqMonad = req POST urlScheme body jsonResponse mempty >>=
         (\ response -> return (responseBody response :: ResponseJSON));
 } in runReq defaultHttpConfig runReqMonad
@@ -64,9 +86,18 @@ getUpdateId rjson = let {
     updates = result rjson;
 } in if null updates then Nothing else Just (update_id $ last updates)
 
+getChatId :: ResponseJSON -> IO (Maybe [ChatID])
+getChatId rjson = let {
+    updates = result rjson;
+} in return $ if null updates
+    then Nothing
+    else Just . fmap (\ (Just msg) -> id $ chat msg) . filter (\ (Just _) -> True) . fmap message $ updates
+
 cycleUpdate' :: (String, String, String, Int) -> ResponseJSON -> IO ResponseJSON
 cycleUpdate' args rjson = getUpdates args (getUpdateId rjson) >>=
     \ ioRJSON -> print ioRJSON
+    >> getChatId ioRJSON
+    >>= print
     >> cycleUpdate' args ioRJSON
 
 cycleUpdate :: (String, String, String, Int) -> IO ResponseJSON
