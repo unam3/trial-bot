@@ -8,7 +8,7 @@ module Bot
 
 import Data.Aeson (FromJSON (parseJSON), ToJSON, (.:), (.:?), withObject)
 import Data.Int (Int32, Int64)
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, fromJust)
 import Data.Text (Text, append, pack)
 import GHC.Generics (Generic)
 import Prelude hiding (id)
@@ -89,12 +89,15 @@ getUpdateId rjson = let {
     updates = result rjson;
 } in if null updates then Nothing else Just (update_id $ last updates)
 
-getTextMessages :: ResponseJSON -> IO (Maybe [Message])
+getTextMessages :: ResponseJSON -> IO (Maybe [Maybe Text])
 getTextMessages rjson = let {
     updates = result rjson;
 } in return $ if null updates
     then Nothing
-    else Just . fmap (\ (Just msg) -> msg) . filter (\ (Just msg) -> isJust $ text msg) $ fmap message updates
+    else Just .
+        fmap (text . fromJust) .
+        filter (\ maybeMsg -> isJust maybeMsg && ((maybe False (const True)) . text $ fromJust maybeMsg)) $
+        fmap message updates
 
 cycleUpdate' :: (String, String, String, Int) -> ResponseJSON -> IO ResponseJSON
 cycleUpdate' args rjson = getUpdates args (getUpdateId rjson) >>=
