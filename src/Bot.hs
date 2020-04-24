@@ -107,4 +107,8 @@ cycleUpdate' args rjson = getUpdates args (getUpdateId rjson) >>=
     >> cycleUpdate' args ioRJSON
 
 cycleUpdate :: (String, String, String, Int) -> IO ResponseJSON
-cycleUpdate args = getUpdates args Nothing >>= cycleUpdate' args
+cycleUpdate args = getUpdates args Nothing >>=
+    \ ioRJSON -> print ioRJSON
+    >> getTextMessages ioRJSON
+    >>= \ textMessages -> print textMessages
+    >> cycleUpdate' args ioRJSON
