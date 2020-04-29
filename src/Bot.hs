@@ -89,7 +89,7 @@ instance FromJSON ResponseJSON where
         <*> v .: "result"
 
 
-getUpdates :: (Text, Text, Text, Int) -> Maybe Offset -> IO ResponseJSON
+getUpdates :: (Text, Text, Text, Text) -> Maybe Offset -> IO ResponseJSON
 getUpdates (token, _, _, _) maybeOffset = let {
     apiMethod = "getUpdates";
     tokenSection = append ("bot" :: Text) token;
@@ -125,14 +125,14 @@ instance ToJSON EchoRequest
 instance FromJSON EchoRequest
 
 
-sendMessage :: (Text, Text, Text, Int) -> ChatID -> Maybe Text -> IO ResponseStatusJSON
+sendMessage :: (Text, Text, Text, Text) -> ChatID -> Maybe Text -> IO ResponseStatusJSON
 sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID maybeText  = let {
     apiMethod = "sendMessage";
     tokenSection = append ("bot" :: Text) token;
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
     commandOrText :: Text -> Text;
     commandOrText "/help" = helpMsg;
-    commandOrText "/repeat" = repeatMsg;
+    commandOrText "/repeat" = mconcat ["Current number of repeats is ", echoRepeatNumber, ". ", repeatMsg];
     commandOrText text = text;
     echoRequest = EchoRequest {
         text = maybe "default answer if no \"text\" field" commandOrText maybeText,
@@ -144,7 +144,7 @@ sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID maybeText  = le
 } in runReq defaultHttpConfig runReqM
 
 
-cycleEcho' :: (Text, Text, Text, Int) -> ResponseJSON -> IO ResponseJSON
+cycleEcho' :: (Text, Text, Text, Text) -> ResponseJSON -> IO ResponseJSON
 cycleEcho' args rjson = getUpdates args (getUpdateId rjson) >>=
     \ ioRJSON -> print ioRJSON
     >> getTextMessages ioRJSON
@@ -154,7 +154,7 @@ cycleEcho' args rjson = getUpdates args (getUpdateId rjson) >>=
         Just list -> forM_ list (\ (chatID, maybeText) -> sendMessage args chatID maybeText)
     >> cycleEcho' args ioRJSON
 
-cycleEcho :: (Text, Text, Text, Int) -> IO ResponseJSON
+cycleEcho :: (Text, Text, Text, Text) -> IO ResponseJSON
 cycleEcho args = getUpdates args Nothing >>=
     \ ioRJSON -> print ioRJSON
     >> getTextMessages ioRJSON

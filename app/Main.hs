@@ -5,13 +5,13 @@ import System.Environment (getArgs)
 import Bot (cycleEcho)
 
 
-processArgs :: [String] -> Maybe (Text, Text, Text, Int)
+processArgs :: [String] -> Maybe (Text, Text, Text, Text)
 processArgs [token, helpMsg, repeatMsg, echoRepeatNumberStr] = let {
     echoRepeatNumber = (read echoRepeatNumberStr :: Int);
     isInRange n = n > 0 && n < 6;
 } in if or [null token, null helpMsg, null repeatMsg, not $ isInRange echoRepeatNumber]
     then Nothing
-    else Just (pack token, pack helpMsg, pack repeatMsg, echoRepeatNumber)
+    else Just (pack token, pack helpMsg, pack repeatMsg, pack echoRepeatNumberStr)
 processArgs _ = Nothing
 
 main :: IO ()
