@@ -4,9 +4,10 @@
 
 module Bot
     (
-    cycleUpdate
+    cycleEcho
     ) where
 
+import Control.Monad (forM_)
 import Data.Aeson (FromJSON (parseJSON), ToJSON, (.:), (.:?), withObject)
 import Data.Int (Int32, Int64)
 import Data.Maybe (isJust, fromJust)
@@ -31,7 +32,7 @@ instance FromJSON RequestJSON
 
 type ChatID = Int64
 
-data Chat = Chat {
+newtype Chat = Chat {
     id :: ChatID
 } deriving (Show, Generic)
 
@@ -66,7 +67,7 @@ instance FromJSON Update where
         <*> v .:? "message"
 
 
-data ResponseStatusJSON = RSJSON {
+newtype ResponseStatusJSON = RSJSON {
     ok :: Bool
 } deriving (Show, Generic)
 
@@ -104,14 +105,14 @@ getUpdateId rjson = let {
     updates = result rjson;
 } in if null updates then Nothing else Just (update_id $ last updates)
 
-getTextMessages :: ResponseJSON -> IO (Maybe [Maybe Text])
+getTextMessages :: ResponseJSON -> IO (Maybe [(ChatID, Maybe Text)])
 getTextMessages rjson = let {
     updates = result rjson;
 } in return $ if null updates
     then Nothing
     else Just .
-        fmap (mtext . fromJust) .
-        filter (\ maybeMsg -> isJust maybeMsg && ((maybe False (const True)) . mtext $ fromJust maybeMsg)) $
+        fmap ((\ msg -> (id . chat  $ msg, mtext msg)) . fromJust) .
+        filter (\ maybeMsg -> isJust maybeMsg && (isJust . mtext $ fromJust maybeMsg)) $
         fmap message updates
 
 
@@ -123,13 +124,13 @@ data EchoRequest = EchoRequest {
 instance ToJSON EchoRequest
 instance FromJSON EchoRequest
 
-sendMessage :: (String, String, String, Int) -> ChatID -> IO ResponseStatusJSON
-sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID = let {
+sendMessage :: (String, String, String, Int) -> ChatID -> Maybe Text -> IO ResponseStatusJSON
+sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID maybeText  = let {
     apiMethod = "sendMessage";
     tokenSection = append ("bot" :: Text) $ pack token;
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
     echoRequest = EchoRequest {
-        text = "echo test",
+        text = maybe "default answer if no \"text\" field" (\ text -> text) maybeText,
         chat_id = chatID
     };
     body = ReqBodyJson echoRequest;
@@ -138,16 +139,22 @@ sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID = let {
 } in runReq defaultHttpConfig runReqM
 
 
-cycleUpdate' :: (String, String, String, Int) -> ResponseJSON -> IO ResponseJSON
-cycleUpdate' args rjson = getUpdates args (getUpdateId rjson) >>=
+cycleEcho' :: (String, String, String, Int) -> ResponseJSON -> IO ResponseJSON
+cycleEcho' args rjson = getUpdates args (getUpdateId rjson) >>=
     \ ioRJSON -> print ioRJSON
     >> getTextMessages ioRJSON
     >>= \ textMessages -> print textMessages
-    >> cycleUpdate' args ioRJSON
+    >> case textMessages of
+        Nothing -> return ()
+        Just list -> forM_ list (\ (chatID, maybeText) -> sendMessage args chatID maybeText)
+    >> cycleEcho' args ioRJSON
 
-cycleUpdate :: (String, String, String, Int) -> IO ResponseJSON
-cycleUpdate args = getUpdates args Nothing >>=
+cycleEcho :: (String, String, String, Int) -> IO ResponseJSON
+cycleEcho args = getUpdates args Nothing >>=
     \ ioRJSON -> print ioRJSON
     >> getTextMessages ioRJSON
     >>= \ textMessages -> print textMessages
-    >> cycleUpdate' args ioRJSON
+    >> case textMessages of
+        Nothing -> return ()
+        Just list -> forM_ list (\ (chatID, maybeText) -> sendMessage args chatID maybeText)
+    >> cycleEcho' args ioRJSON

@@ -1,7 +1,7 @@
 module Main where
 
 import System.Environment (getArgs)
-import Bot (cycleUpdate)
+import Bot (cycleEcho)
 
 
 processArgs :: [String] -> Maybe (String, String, String, Int)
@@ -18,6 +18,6 @@ main = do
     args <- getArgs
     case args of
         [_, _, _, _] -> case processArgs args of
-            Just args' -> cycleUpdate args' >> return ()
+            Just args' -> cycleEcho args' >> return ()
             Nothing -> putStrLn "some argument passed from command line is wrong"
         _ -> putStrLn "error: exactly four arguments needed: token, helpMsg, repeatMsg, echoRepeatNumber"
