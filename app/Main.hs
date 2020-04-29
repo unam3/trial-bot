@@ -1,16 +1,17 @@
 module Main where
 
+import Data.Text (Text, pack)
 import System.Environment (getArgs)
 import Bot (cycleEcho)
 
 
-processArgs :: [String] -> Maybe (String, String, String, Int)
+processArgs :: [String] -> Maybe (Text, Text, Text, Int)
 processArgs [token, helpMsg, repeatMsg, echoRepeatNumberStr] = let {
     echoRepeatNumber = (read echoRepeatNumberStr :: Int);
     isInRange n = n > 0 && n < 6;
 } in if or [null token, null helpMsg, null repeatMsg, not $ isInRange echoRepeatNumber]
     then Nothing
-    else Just (token, helpMsg, repeatMsg, echoRepeatNumber)
+    else Just (pack token, pack helpMsg, pack repeatMsg, echoRepeatNumber)
 processArgs _ = Nothing
 
 main :: IO ()
