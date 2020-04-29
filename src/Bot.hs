@@ -65,6 +65,17 @@ instance FromJSON Update where
         <$> v .: "update_id"
         <*> v .:? "message"
 
+
+data ResponseStatusJSON = RSJSON {
+    ok :: Bool
+} deriving (Show, Generic)
+
+instance ToJSON ResponseStatusJSON
+instance FromJSON ResponseStatusJSON where
+    parseJSON = withObject "ResponseStatusJSON" $ \v -> RSJSON
+        <$> v .: "ok"
+
+
 data ResponseJSON = RJSON {
     ok :: Bool,
     result :: [Update]
@@ -112,7 +123,7 @@ data EchoRequest = EchoRequest {
 instance ToJSON EchoRequest
 instance FromJSON EchoRequest
 
-sendMessage :: (String, String, String, Int) -> ChatID -> IO ResponseJSON
+sendMessage :: (String, String, String, Int) -> ChatID -> IO ResponseStatusJSON
 sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID = let {
     apiMethod = "sendMessage";
     tokenSection = append ("bot" :: Text) $ pack token;
@@ -123,7 +134,7 @@ sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID = let {
     };
     body = ReqBodyJson echoRequest;
     runReqM = req POST urlScheme body jsonResponse mempty >>=
-        (\ response -> return (responseBody response :: ResponseJSON));
+        (\ response -> return (responseBody response :: ResponseStatusJSON));
 } in runReq defaultHttpConfig runReqM
 
 
