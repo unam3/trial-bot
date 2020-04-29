@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 
 module Bot
     (
@@ -50,6 +51,9 @@ instance FromJSON Message where
         <$> v .: "chat"
         <*> v .:? "text"
 
+mtext :: Message -> Maybe Text
+mtext = text
+
 data Update = Update {
     update_id :: Offset,
     message :: Maybe Message
@@ -95,9 +99,33 @@ getTextMessages rjson = let {
 } in return $ if null updates
     then Nothing
     else Just .
-        fmap (text . fromJust) .
-        filter (\ maybeMsg -> isJust maybeMsg && ((maybe False (const True)) . text $ fromJust maybeMsg)) $
+        fmap (mtext . fromJust) .
+        filter (\ maybeMsg -> isJust maybeMsg && ((maybe False (const True)) . mtext $ fromJust maybeMsg)) $
         fmap message updates
+
+
+data EchoRequest = EchoRequest {
+    chat_id :: ChatID,
+    text :: Text
+} deriving (Show, Generic)
+
+instance ToJSON EchoRequest
+instance FromJSON EchoRequest
+
+sendMessage :: (String, String, String, Int) -> ChatID -> IO ResponseJSON
+sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID = let {
+    apiMethod = "sendMessage";
+    tokenSection = append ("bot" :: Text) $ pack token;
+    urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
+    echoRequest = EchoRequest {
+        text = "echo test",
+        chat_id = chatID
+    };
+    body = ReqBodyJson echoRequest;
+    runReqM = req POST urlScheme body jsonResponse mempty >>=
+        (\ response -> return (responseBody response :: ResponseJSON));
+} in runReq defaultHttpConfig runReqM
+
 
 cycleUpdate' :: (String, String, String, Int) -> ResponseJSON -> IO ResponseJSON
 cycleUpdate' args rjson = getUpdates args (getUpdateId rjson) >>=
