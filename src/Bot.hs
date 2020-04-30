@@ -123,8 +123,9 @@ newtype KeyboardButton = KeyboardButton {
 instance ToJSON KeyboardButton
 instance FromJSON KeyboardButton
 
-newtype ReplyKeyboardMarkup = ReplyKeyboardMarkup {
-    keyboard :: [[KeyboardButton]]
+data ReplyKeyboardMarkup = ReplyKeyboardMarkup {
+    keyboard :: [[KeyboardButton]],
+    one_time_keyboard :: Bool
 } deriving (Show, Generic)
 
 instance ToJSON ReplyKeyboardMarkup
@@ -153,10 +154,17 @@ sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID maybeText  = le
     commandOrText "/help" = helpMsg;
     commandOrText "/repeat" = mconcat ["Current number of repeats is ", echoRepeatNumber, ". ", repeatMsg];
     commandOrText text = text;
+    isRepeat (Just "/repeat") = True;
+    isRepeat _ = False;
     echoRequest = EchoRequest {
         text = maybe "default answer if no \"text\" field" commandOrText maybeText,
         chat_id = chatID,
-        reply_markup = Nothing
+        reply_markup = if isRepeat maybeText 
+            then let {
+                buttons = [[KeyboardButton {text = "1"}, KeyboardButton {text = "2"}, KeyboardButton {text = "3"},
+                    KeyboardButton {text = "4"}, KeyboardButton {text = "5"}]];
+            } in Just ReplyKeyboardMarkup {keyboard = buttons, one_time_keyboard = True}
+            else Nothing
     };
     body = ReqBodyJson echoRequest;
     runReqM = req POST urlScheme body jsonResponse mempty >>=
