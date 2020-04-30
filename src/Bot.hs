@@ -8,7 +8,7 @@ module Bot
     ) where
 
 import Control.Monad (forM_)
-import Data.Aeson (FromJSON (parseJSON), ToJSON, (.:), (.:?), withObject)
+import Data.Aeson (FromJSON (parseJSON), ToJSON (toJSON), (.:), (.:?), withObject, genericParseJSON, genericToJSON, defaultOptions, omitNothingFields)
 import Data.Int (Int32, Int64)
 import Data.Maybe (isJust, fromJust)
 import Data.Text (Text, append)
@@ -116,13 +116,32 @@ getTextMessages rjson = let {
         fmap message updates
 
 
-data EchoRequest = EchoRequest {
-    chat_id :: ChatID,
+newtype KeyboardButton = KeyboardButton {
     text :: Text
 } deriving (Show, Generic)
 
-instance ToJSON EchoRequest
-instance FromJSON EchoRequest
+instance ToJSON KeyboardButton
+instance FromJSON KeyboardButton
+
+newtype ReplyKeyboardMarkup = ReplyKeyboardMarkup {
+    keyboard :: [[KeyboardButton]]
+} deriving (Show, Generic)
+
+instance ToJSON ReplyKeyboardMarkup
+instance FromJSON ReplyKeyboardMarkup
+
+
+data EchoRequest = EchoRequest {
+    chat_id :: ChatID,
+    text :: Text,
+    reply_markup :: Maybe ReplyKeyboardMarkup
+} deriving (Show, Generic)
+
+instance ToJSON EchoRequest where
+    toJSON = genericToJSON defaultOptions { omitNothingFields = True }
+
+instance FromJSON EchoRequest where
+    parseJSON = genericParseJSON defaultOptions { omitNothingFields = True }
 
 
 sendMessage :: (Text, Text, Text, Text) -> ChatID -> Maybe Text -> IO ResponseStatusJSON
@@ -136,7 +155,8 @@ sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID maybeText  = le
     commandOrText text = text;
     echoRequest = EchoRequest {
         text = maybe "default answer if no \"text\" field" commandOrText maybeText,
-        chat_id = chatID
+        chat_id = chatID,
+        reply_markup = Nothing
     };
     body = ReqBodyJson echoRequest;
     runReqM = req POST urlScheme body jsonResponse mempty >>=
