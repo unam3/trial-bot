@@ -8,7 +8,7 @@ module Bot
     ) where
 
 import Control.Monad (forM_)
-import Data.Aeson (FromJSON (parseJSON), ToJSON (toJSON), (.:), (.:?), withObject, genericParseJSON, genericToJSON, defaultOptions, omitNothingFields)
+import Data.Aeson (FromJSON (parseJSON), ToJSON (toJSON), (.:), (.:?), withObject, genericParseJSON, genericToJSON, defaultOptions, omitNothingFields, fieldLabelModifier)
 import Data.Int (Int32, Int64)
 import Data.Maybe (isJust, fromJust)
 import Data.Text (Text, append)
@@ -116,8 +116,19 @@ getTextMessages rjson = let {
         fmap message updates
 
 
-newtype KeyboardButton = KeyboardButton {
-    text :: Text
+data KeyboardButtonPollType = KeyboardButtonPollType {
+    _type :: Maybe Text
+} deriving (Show, Generic)
+
+instance ToJSON KeyboardButtonPollType where
+    toJSON = genericToJSON defaultOptions { omitNothingFields = True, fieldLabelModifier = drop 1 }
+
+instance FromJSON KeyboardButtonPollType where
+    parseJSON = genericParseJSON defaultOptions { omitNothingFields = True, fieldLabelModifier = drop 1 }
+
+data KeyboardButton = KeyboardButton {
+    text :: Text,
+    request_poll :: KeyboardButtonPollType
 } deriving (Show, Generic)
 
 instance ToJSON KeyboardButton
@@ -161,8 +172,9 @@ sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID maybeText  = le
         chat_id = chatID,
         reply_markup = if isRepeat maybeText 
             then let {
-                buttons = [[KeyboardButton {text = "1"}, KeyboardButton {text = "2"}, KeyboardButton {text = "3"},
-                    KeyboardButton {text = "4"}, KeyboardButton {text = "5"}]];
+                requestPoll = KeyboardButtonPollType {_type = Nothing};
+                buttons = [[KeyboardButton {text = "1", request_poll = requestPoll}, KeyboardButton {text = "2", request_poll = requestPoll}, KeyboardButton {text = "3", request_poll = requestPoll},
+                    KeyboardButton {text = "4", request_poll = requestPoll}, KeyboardButton {text = "5", request_poll = requestPoll}]];
             } in Just ReplyKeyboardMarkup {keyboard = buttons, one_time_keyboard = True}
             else Nothing
     };
