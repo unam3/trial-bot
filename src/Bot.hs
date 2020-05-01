@@ -145,16 +145,28 @@ instance FromJSON ReplyKeyboardMarkup
 
 data EchoRequest = EchoRequest {
     chat_id :: ChatID,
-    text :: Text,
-    reply_markup :: Maybe ReplyKeyboardMarkup
+    text :: Text
 } deriving (Show, Generic)
 
-instance ToJSON EchoRequest where
-    toJSON = genericToJSON defaultOptions { omitNothingFields = True }
+instance ToJSON EchoRequest
+instance FromJSON EchoRequest
 
-instance FromJSON EchoRequest where
-    parseJSON = genericParseJSON defaultOptions { omitNothingFields = True }
 
+data RepeatRequest = RepeatRequest {
+    chat_id :: ChatID,
+    question :: Text,
+    options :: [Text]
+    --reply_markup :: ReplyKeyboardMarkup
+} deriving (Show, Generic)
+
+instance ToJSON RepeatRequest
+instance FromJSON RepeatRequest
+
+
+
+isRepeat :: Maybe Text -> Bool
+isRepeat (Just "/repeat") = True;
+isRepeat _ = False;
 
 sendMessage :: (Text, Text, Text, Text) -> ChatID -> Maybe Text -> IO ResponseStatusJSON
 sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID maybeText  = let {
@@ -165,20 +177,32 @@ sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID maybeText  = le
     commandOrText "/help" = helpMsg;
     commandOrText "/repeat" = mconcat ["Current number of repeats is ", echoRepeatNumber, ". ", repeatMsg];
     commandOrText text = text;
-    isRepeat (Just "/repeat") = True;
-    isRepeat _ = False;
-    echoRequest = EchoRequest {
+    request = EchoRequest {
         text = maybe "default answer if no \"text\" field" commandOrText maybeText,
-        chat_id = chatID,
-        reply_markup = if isRepeat maybeText 
-            then let {
-                requestPoll = KeyboardButtonPollType {_type = Nothing};
-                buttons = [[KeyboardButton {text = "1", request_poll = requestPoll}, KeyboardButton {text = "2", request_poll = requestPoll}, KeyboardButton {text = "3", request_poll = requestPoll},
-                    KeyboardButton {text = "4", request_poll = requestPoll}, KeyboardButton {text = "5", request_poll = requestPoll}]];
-            } in Just ReplyKeyboardMarkup {keyboard = buttons, one_time_keyboard = True}
-            else Nothing
+        chat_id = chatID
     };
-    body = ReqBodyJson echoRequest;
+    body = ReqBodyJson request;
+    runReqM = req POST urlScheme body jsonResponse mempty >>=
+        (\ response -> return (responseBody response :: ResponseStatusJSON));
+} in runReq defaultHttpConfig runReqM
+
+sendPoll :: (Text, Text, Text, Text) -> ChatID -> IO ResponseStatusJSON
+sendPoll (token, helpMsg, repeatMsg, echoRepeatNumber) chatID = let {
+    apiMethod = "sendPoll";
+    tokenSection = append ("bot" :: Text) token;
+    urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
+    request = RepeatRequest {
+        question = mconcat ["Current number of repeats is ", echoRepeatNumber, ". ", repeatMsg],
+        chat_id = chatID,
+        options = ["1", "2", "3", "4", "5"]
+        --reply_markup =
+        --    let {
+        --        requestPoll = KeyboardButtonPollType {_type = Nothing};
+        --        buttons = [[KeyboardButton {text = "1", request_poll = requestPoll}, KeyboardButton {text = "2", request_poll = requestPoll}, KeyboardButton {text = "3", request_poll = requestPoll},
+        --            KeyboardButton {text = "4", request_poll = requestPoll}, KeyboardButton {text = "5", request_poll = requestPoll}]];
+        --    } in ReplyKeyboardMarkup {keyboard = buttons, one_time_keyboard = True}
+    };
+    body = ReqBodyJson request;
     runReqM = req POST urlScheme body jsonResponse mempty >>=
         (\ response -> return (responseBody response :: ResponseStatusJSON));
 } in runReq defaultHttpConfig runReqM
@@ -191,7 +215,9 @@ cycleEcho' args rjson = getUpdates args (getUpdateId rjson) >>=
     >>= \ textMessages -> print textMessages
     >> case textMessages of
         Nothing -> return ()
-        Just list -> forM_ list (\ (chatID, maybeText) -> sendMessage args chatID maybeText)
+        Just list -> forM_ list (\ (chatID, maybeText) -> if isRepeat maybeText
+            then sendPoll args chatID
+            else sendMessage args chatID maybeText)
     >> cycleEcho' args ioRJSON
 
 cycleEcho :: (Text, Text, Text, Text) -> IO ResponseJSON
@@ -201,5 +227,7 @@ cycleEcho args = getUpdates args Nothing >>=
     >>= \ textMessages -> print textMessages
     >> case textMessages of
         Nothing -> return ()
-        Just list -> forM_ list (\ (chatID, maybeText) -> sendMessage args chatID maybeText)
+        Just list -> forM_ list (\ (chatID, maybeText) -> if isRepeat maybeText
+            then sendPoll args chatID
+            else sendMessage args chatID maybeText)
     >> cycleEcho' args ioRJSON
