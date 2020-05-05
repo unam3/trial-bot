@@ -41,6 +41,26 @@ instance FromJSON Chat where
     parseJSON = withObject "Chat" $ \v -> Chat
         <$> v .: "id"
 
+data PollOption = PollOption {
+    text :: Text,
+    voter_count :: Int
+} deriving (Show, Generic)
+
+instance ToJSON PollOption
+instance FromJSON PollOption where
+    parseJSON = withObject "PollOption" $ \v -> PollOption
+        <$> v .: "text"
+        <*> v .: "voter_count"
+
+newtype Poll = Poll {
+    options :: [PollOption]
+} deriving (Show, Generic)
+
+instance ToJSON Poll
+instance FromJSON Poll where
+    parseJSON = withObject "Poll" $ \v -> Poll
+        <$> v .: "options"
+
 data Message = Message {
     chat :: Chat,
     text :: Maybe Text
@@ -57,7 +77,8 @@ mtext = text
 
 data Update = Update {
     update_id :: Offset,
-    message :: Maybe Message
+    message :: Maybe Message,
+    poll :: Maybe Poll
 } deriving (Show, Generic)
 
 instance ToJSON Update
@@ -65,6 +86,7 @@ instance FromJSON Update where
     parseJSON = withObject "Update" $ \v -> Update
         <$> v .: "update_id"
         <*> v .:? "message"
+        <*> v .:? "poll"
 
 
 newtype ResponseStatusJSON = RSJSON {
@@ -105,18 +127,32 @@ getUpdateId rjson = let {
     updates = result rjson;
 } in if null updates then Nothing else Just (update_id $ last updates)
 
-getTextMessages :: ResponseJSON -> IO (Maybe [(ChatID, Maybe Text)])
+type MaybeMessageText = Maybe Text
+
+getTextMessages :: ResponseJSON -> IO (Maybe [(ChatID, MaybeMessageText)])
 getTextMessages rjson = let {
     updates = result rjson;
 } in return $ if null updates
     then Nothing
     else Just .
-        fmap ((\ msg -> (id . chat  $ msg, mtext msg)) . fromJust) .
-        filter (\ maybeMsg -> isJust maybeMsg && (isJust . mtext $ fromJust maybeMsg)) $
+        fmap (\ msg -> (id . (chat :: Message -> Chat) $ msg, mtext msg)) .
+        filter (isJust . mtext) .
+        fmap fromJust .
+        filter isJust $
         fmap message updates
 
+getPollResults :: ResponseJSON -> IO (Maybe [Poll])
+getPollResults rjson = let {
+    updates = result rjson;
+} in return $ if null updates
+    then Nothing
+    else Just .
+        fmap fromJust .
+        filter isJust $
+        fmap poll updates
 
-data KeyboardButtonPollType = KeyboardButtonPollType {
+
+newtype KeyboardButtonPollType = KeyboardButtonPollType {
     _type :: Maybe Text
 } deriving (Show, Generic)
 
@@ -169,13 +205,12 @@ isRepeat (Just "/repeat") = True;
 isRepeat _ = False;
 
 sendMessage :: (Text, Text, Text, Text) -> ChatID -> Maybe Text -> IO ResponseStatusJSON
-sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID maybeText  = let {
+sendMessage (token, helpMsg, _, _) chatID maybeText  = let {
     apiMethod = "sendMessage";
     tokenSection = append ("bot" :: Text) token;
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
     commandOrText :: Text -> Text;
     commandOrText "/help" = helpMsg;
-    commandOrText "/repeat" = mconcat ["Current number of repeats is ", echoRepeatNumber, ". ", repeatMsg];
     commandOrText text = text;
     request = EchoRequest {
         text = maybe "default answer if no \"text\" field" commandOrText maybeText,
@@ -187,7 +222,7 @@ sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID maybeText  = le
 } in runReq defaultHttpConfig runReqM
 
 sendPoll :: (Text, Text, Text, Text) -> ChatID -> IO ResponseStatusJSON
-sendPoll (token, helpMsg, repeatMsg, echoRepeatNumber) chatID = let {
+sendPoll (token, _, repeatMsg, echoRepeatNumber) chatID = let {
     apiMethod = "sendPoll";
     tokenSection = append ("bot" :: Text) token;
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
@@ -195,12 +230,6 @@ sendPoll (token, helpMsg, repeatMsg, echoRepeatNumber) chatID = let {
         question = mconcat ["Current number of repeats is ", echoRepeatNumber, ". ", repeatMsg],
         chat_id = chatID,
         options = ["1", "2", "3", "4", "5"]
-        --reply_markup =
-        --    let {
-        --        requestPoll = KeyboardButtonPollType {_type = Nothing};
-        --        buttons = [[KeyboardButton {text = "1", request_poll = requestPoll}, KeyboardButton {text = "2", request_poll = requestPoll}, KeyboardButton {text = "3", request_poll = requestPoll},
-        --            KeyboardButton {text = "4", request_poll = requestPoll}, KeyboardButton {text = "5", request_poll = requestPoll}]];
-        --    } in ReplyKeyboardMarkup {keyboard = buttons, one_time_keyboard = True}
     };
     body = ReqBodyJson request;
     runReqM = req POST urlScheme body jsonResponse mempty >>=
@@ -218,6 +247,8 @@ cycleEcho' args rjson = getUpdates args (getUpdateId rjson) >>=
         Just list -> forM_ list (\ (chatID, maybeText) -> if isRepeat maybeText
             then sendPoll args chatID
             else sendMessage args chatID maybeText)
+    >> getPollResults ioRJSON
+    >>= \ pollResults -> print pollResults
     >> cycleEcho' args ioRJSON
 
 cycleEcho :: (Text, Text, Text, Text) -> IO ResponseJSON
@@ -230,4 +261,6 @@ cycleEcho args = getUpdates args Nothing >>=
         Just list -> forM_ list (\ (chatID, maybeText) -> if isRepeat maybeText
             then sendPoll args chatID
             else sendMessage args chatID maybeText)
+    >> getPollResults ioRJSON
+    >>= \ pollResults -> print pollResults
     >> cycleEcho' args ioRJSON
