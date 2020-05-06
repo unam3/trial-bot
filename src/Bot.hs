@@ -141,13 +141,13 @@ getTextMessages rjson = let {
         filter isJust $
         fmap message updates
 
-getPollResults :: ResponseJSON -> IO (Maybe [Poll])
+getPollResults :: ResponseJSON -> IO (Maybe [[PollOption]])
 getPollResults rjson = let {
     updates = result rjson;
 } in return $ if null updates
     then Nothing
     else Just .
-        fmap fromJust .
+        fmap (filter ((> 0) . voter_count) . (options :: Poll -> [PollOption]) . fromJust) .
         filter isJust $
         fmap poll updates
 
