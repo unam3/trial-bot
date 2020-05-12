@@ -7,7 +7,7 @@ module Bot
     cycleEcho
     ) where
 
-import Control.Monad (forM_, replicateM)
+import Control.Monad (replicateM)
 import Data.Aeson (FromJSON (parseJSON), ToJSON (toJSON), (.:), (.:?), withObject, genericParseJSON, genericToJSON, defaultOptions, omitNothingFields, fieldLabelModifier)
 import Data.Either (fromRight)
 import Data.Int (Int32, Int64)
@@ -130,31 +130,6 @@ getUpdateId rjson = let {
     updates = result rjson;
 } in if null updates then Nothing else Just (update_id $ last updates)
 
-type MaybeMessageText = Maybe Text
-
-getTextMessages :: ResponseJSON -> IO (Maybe [(ChatID, MaybeMessageText)])
-getTextMessages rjson = let {
-    updates = result rjson;
-} in return $ if null updates
-    then Nothing
-    else Just .
-        fmap (\ msg -> (id . (chat :: Message -> Chat) $ msg, mtext msg)) .
-        filter (isJust . mtext) .
-        fmap fromJust .
-        filter isJust $
-        fmap message updates
-
-getPollResults :: ResponseJSON -> IO (Maybe PollOption)
-getPollResults rjson = let {
-    updates = result rjson;
-    polls = filter isJust $
-        fmap poll updates;
-    pollResults = mconcat . fmap (filter ((> 0) . voter_count) . (options :: Poll -> [PollOption]) . fromJust) $ polls
-} in return $ if null updates || null polls || null pollResults
-    then Nothing
-    else Just . head $ pollResults
-
-
 newtype KeyboardButtonPollType = KeyboardButtonPollType {
     _type :: Maybe Text
 } deriving (Show, Generic)
@@ -242,40 +217,60 @@ sendPoll (token, _, repeatMsg, echoRepeatNumber) chatID = let {
 getInt :: Text -> Int
 getInt = fst . fromRight (1, pack "1") . decimal
 
+type MaybeUpdateContent = Maybe (Either (ChatID, Maybe Text) PollOption)
+
+getSupportedUpdate :: [Update] -> MaybeUpdateContent
+getSupportedUpdate (update : updateList) = let {
+    maybeMessage = message update;
+    maybeText = maybe Nothing mtext maybeMessage;
+    maybeUpdateWithPoll = poll update;
+    extractVotedPollOption = head . filter ((> 0) . voter_count) . (options :: Poll -> [PollOption]);
+} in if isJust maybeText
+    then Just $ Left (id . (chat :: Message -> Chat) $ fromJust maybeMessage, maybeText)
+    else maybe (getSupportedUpdate updateList) (Just . Right . extractVotedPollOption) maybeUpdateWithPoll
+getSupportedUpdate [] = Nothing
+
+getLatestSupportedUpdate :: ResponseJSON -> IO MaybeUpdateContent
+getLatestSupportedUpdate rjson = let {
+    updates = result rjson;
+} in return . getSupportedUpdate $ reverse updates
+
 cycleEcho' :: (Text, Text, Text, Text) -> ResponseJSON -> IO ResponseJSON
 cycleEcho' args@(_, _, _, echoRepeatNumberText) rjson = getUpdates args (getUpdateId rjson) >>=
     \ ioRJSON -> print ioRJSON
-    >> getTextMessages ioRJSON
-    >>= \ textMessages -> print textMessages
-    >> case textMessages of
-        Nothing -> return ()
-        Just list -> forM_ list (\ (chatID, maybeText) -> if isRepeat maybeText
+
+    >> getLatestSupportedUpdate ioRJSON
+    >>= \ latestSupportedUpdate -> print latestSupportedUpdate
+    >> case latestSupportedUpdate of
+        Just (Left (chatID, maybeText)) -> if isRepeat maybeText
             then sendPoll args chatID
-            else head <$> replicateM (getInt echoRepeatNumberText) (sendMessage args chatID maybeText))
-    >> getPollResults ioRJSON
-    >>= \ pollResults -> print pollResults
+            else head <$> replicateM (getInt echoRepeatNumberText) (sendMessage args chatID maybeText)
+        -- refactor
+        _ -> return $ RSJSON {ok = True}
+
     >> let {
         (token, helpMsg, repeatMsg, _) = args;
-        args' = if isJust pollResults
-            then (token, helpMsg, repeatMsg, (text :: PollOption -> Text) $ fromJust pollResults)
-            else args;
+        args' = case latestSupportedUpdate of
+            Just (Right pollOption) -> (token, helpMsg, repeatMsg, (text :: PollOption -> Text) pollOption)
+            _ -> args;
     } in cycleEcho' args' ioRJSON
 
 cycleEcho :: (Text, Text, Text, Text) -> IO ResponseJSON
 cycleEcho args@(_, _, _, echoRepeatNumberText) = getUpdates args Nothing >>=
     \ ioRJSON -> print ioRJSON
-    >> getTextMessages ioRJSON
-    >>= \ textMessages -> print textMessages
-    >> case textMessages of
-        Nothing -> return ()
-        Just list -> forM_ list (\ (chatID, maybeText) -> if isRepeat maybeText
+
+    >> getLatestSupportedUpdate ioRJSON
+    >>= \ latestSupportedUpdate -> print latestSupportedUpdate
+    >> case latestSupportedUpdate of
+        Just (Left (chatID, maybeText)) -> if isRepeat maybeText
             then sendPoll args chatID
-            else head <$> replicateM (getInt echoRepeatNumberText) (sendMessage args chatID maybeText))
-    >> getPollResults ioRJSON
-    >>= \ pollResults -> print pollResults
+            else head <$> replicateM (getInt echoRepeatNumberText) (sendMessage args chatID maybeText)
+        -- _ -> return ()
+        _ -> return $ RSJSON {ok = True}
+
     >> let {
         (token, helpMsg, repeatMsg, _) = args;
-        args' = if isJust pollResults
-            then (token, helpMsg, repeatMsg, (text :: PollOption -> Text) $ fromJust pollResults)
-            else args;
+        args' = case latestSupportedUpdate of
+            Just (Right pollOption) -> (token, helpMsg, repeatMsg, (text :: PollOption -> Text) pollOption)
+            _ -> args;
     } in cycleEcho' args' ioRJSON

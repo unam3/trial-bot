@@ -30,4 +30,4 @@ stack exec trial-bot-exe "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" "help msg" 
 ## Constraints
 
 It's assumed that trial-bot will be used only in one private chat.
-Only latest message (from [updates](https://core.telegram.org/bots/api#getting-updates)) will be processed.
+Only latest text message (from [updates](https://core.telegram.org/bots/api#getting-updates)) will be processed.
