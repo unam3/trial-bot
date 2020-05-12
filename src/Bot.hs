@@ -7,7 +7,7 @@ module Bot
     cycleEcho
     ) where
 
-import Control.Monad (replicateM)
+import Control.Monad (replicateM_, void)
 import Data.Aeson (FromJSON (parseJSON), ToJSON (toJSON), (.:), (.:?), withObject, genericParseJSON, genericToJSON, defaultOptions, omitNothingFields, fieldLabelModifier)
 import Data.Either (fromRight)
 import Data.Int (Int32, Int64)
@@ -243,10 +243,9 @@ cycleEcho' args@(_, _, _, echoRepeatNumberText) rjson = getUpdates args (getUpda
     >>= \ latestSupportedUpdate -> print latestSupportedUpdate
     >> case latestSupportedUpdate of
         Just (Left (chatID, maybeText)) -> if isRepeat maybeText
-            then sendPoll args chatID
-            else head <$> replicateM (getInt echoRepeatNumberText) (sendMessage args chatID maybeText)
-        -- refactor
-        _ -> return $ RSJSON {ok = True}
+            then void $ sendPoll args chatID
+            else replicateM_ (getInt echoRepeatNumberText) (sendMessage args chatID maybeText)
+        _ -> return ()
 
     >> let {
         (token, helpMsg, repeatMsg, _) = args;
@@ -263,10 +262,9 @@ cycleEcho args@(_, _, _, echoRepeatNumberText) = getUpdates args Nothing >>=
     >>= \ latestSupportedUpdate -> print latestSupportedUpdate
     >> case latestSupportedUpdate of
         Just (Left (chatID, maybeText)) -> if isRepeat maybeText
-            then sendPoll args chatID
-            else head <$> replicateM (getInt echoRepeatNumberText) (sendMessage args chatID maybeText)
-        -- _ -> return ()
-        _ -> return $ RSJSON {ok = True}
+            then void $ sendPoll args chatID
+            else replicateM_ (getInt echoRepeatNumberText) (sendMessage args chatID maybeText)
+        _ -> return ()
 
     >> let {
         (token, helpMsg, repeatMsg, _) = args;
