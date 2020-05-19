@@ -183,7 +183,7 @@ isRepeat (Just "/repeat") = True;
 isRepeat _ = False;
 
 sendMessage :: (Text, Text, Text, Text) -> ChatID -> Maybe Text -> IO ResponseStatusJSON
-sendMessage (token, helpMsg, _, _) chatID maybeText  = let {
+sendMessage (token, helpMsg, _, _) chatID maybeText = let {
     apiMethod = "sendMessage";
     tokenSection = append ("bot" :: Text) token;
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
@@ -235,8 +235,11 @@ getLatestSupportedUpdate rjson = let {
     updates = result rjson;
 } in return . getSupportedUpdate $ reverse updates
 
-cycleEcho' :: (Text, Text, Text, Text) -> ResponseJSON -> IO ResponseJSON
-cycleEcho' args@(_, _, _, echoRepeatNumberText) rjson = getUpdates args (getUpdateId rjson) >>=
+cycleEcho' :: (Text, Text, Text, Text) -> Maybe ResponseJSON -> IO ResponseJSON
+cycleEcho' args@(_, _, _, echoRepeatNumberText) maybeRJSON = let {
+        maybeOffset = maybe Nothing getUpdateId maybeRJSON;
+    } in getUpdates args maybeOffset >>=
+
     \ ioRJSON -> print ioRJSON
 
     >> getLatestSupportedUpdate ioRJSON
@@ -252,23 +255,9 @@ cycleEcho' args@(_, _, _, echoRepeatNumberText) rjson = getUpdates args (getUpda
         args' = case latestSupportedUpdate of
             Just (Right pollOption) -> (token, helpMsg, repeatMsg, (text :: PollOption -> Text) pollOption)
             _ -> args;
-    } in cycleEcho' args' ioRJSON
+    } in cycleEcho' args' $ Just ioRJSON
 
 cycleEcho :: (Text, Text, Text, Text) -> IO ResponseJSON
-cycleEcho args@(_, _, _, echoRepeatNumberText) = getUpdates args Nothing >>=
-    \ ioRJSON -> print ioRJSON
-
-    >> getLatestSupportedUpdate ioRJSON
-    >>= \ latestSupportedUpdate -> print latestSupportedUpdate
-    >> case latestSupportedUpdate of
-        Just (Left (chatID, maybeText)) -> if isRepeat maybeText
-            then void $ sendPoll args chatID
-            else replicateM_ (getInt echoRepeatNumberText) (sendMessage args chatID maybeText)
-        _ -> return ()
-
-    >> let {
-        (token, helpMsg, repeatMsg, _) = args;
-        args' = case latestSupportedUpdate of
-            Just (Right pollOption) -> (token, helpMsg, repeatMsg, (text :: PollOption -> Text) pollOption)
-            _ -> args;
-    } in cycleEcho' args' ioRJSON
+cycleEcho args = let {
+    noRJSON = Nothing;
+} in cycleEcho' args noRJSON
