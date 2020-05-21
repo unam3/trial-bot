@@ -230,10 +230,10 @@ getSupportedUpdate (update : updateList) = let {
     else maybe (getSupportedUpdate updateList) (Just . Right . extractVotedPollOption) maybeUpdateWithPoll
 getSupportedUpdate [] = Nothing
 
-getLatestSupportedUpdate :: ResponseJSON -> IO MaybeUpdateContent
+getLatestSupportedUpdate :: ResponseJSON -> MaybeUpdateContent
 getLatestSupportedUpdate rjson = let {
     updates = result rjson;
-} in return . getSupportedUpdate $ reverse updates
+} in getSupportedUpdate $ reverse updates
 
 cycleEcho' :: (Text, Text, Text, Text) -> Maybe ResponseJSON -> IO ResponseJSON
 cycleEcho' args@(_, _, _, echoRepeatNumberText) maybeRJSON = let {
@@ -242,7 +242,7 @@ cycleEcho' args@(_, _, _, echoRepeatNumberText) maybeRJSON = let {
 
     \ ioRJSON -> print ioRJSON
 
-    >> getLatestSupportedUpdate ioRJSON
+    >> return (getLatestSupportedUpdate ioRJSON)
     >>= \ latestSupportedUpdate -> print latestSupportedUpdate
     >> case latestSupportedUpdate of
         Just (Left (chatID, maybeText)) -> if isRepeat maybeText
