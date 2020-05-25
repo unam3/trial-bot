@@ -75,9 +75,6 @@ instance FromJSON Message where
         <$> v .: "chat"
         <*> v .:? "text"
 
-mtext :: Message -> Maybe Text
-mtext = text
-
 data Update = Update {
     update_id :: Offset,
     message :: Maybe Message,
@@ -114,13 +111,16 @@ instance FromJSON ResponseJSON where
         <*> v .: "result"
 
 
+withUpdatesOffset :: Offset -> RequestJSON
+withUpdatesOffset updatesOffset = WithOffset {timeout = 20, offset = updatesOffset + 1}
+
 getUpdates :: (Text, Text, Text, Text) -> Maybe Offset -> IO ResponseJSON
 getUpdates (token, _, _, _) maybeOffset = let {
     apiMethod = "getUpdates";
     tokenSection = append ("bot" :: Text) token;
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
     body = ReqBodyJson $
-        maybe (WithoutOffset {timeout = 20}) (\ offset -> WithOffset {timeout = 20, offset = offset + 1}) maybeOffset;
+        maybe (WithoutOffset {timeout = 20}) withUpdatesOffset maybeOffset;
     runReqMonad = req POST urlScheme body jsonResponse mempty >>=
         (\ response -> return (responseBody response :: ResponseJSON));
 } in runReq defaultHttpConfig runReqMonad
@@ -189,7 +189,7 @@ sendMessage (token, helpMsg, _, _) chatID maybeText = let {
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
     commandOrText :: Text -> Text;
     commandOrText "/help" = helpMsg;
-    commandOrText text = text;
+    commandOrText t = t;
     request = EchoRequest {
         text = maybe "default answer if no \"text\" field" commandOrText maybeText,
         chat_id = chatID
@@ -222,7 +222,7 @@ type MaybeUpdateContent = Maybe (Either (ChatID, Maybe Text) PollOption)
 getSupportedUpdate :: [Update] -> MaybeUpdateContent
 getSupportedUpdate (update : updateList) = let {
     maybeMessage = message update;
-    maybeText = maybe Nothing mtext maybeMessage;
+    maybeText = maybe Nothing (text :: Message -> Maybe Text) maybeMessage;
     maybeUpdateWithPoll = poll update;
     extractVotedPollOption = head . filter ((> 0) . voter_count) . (options :: Poll -> [PollOption]);
 } in if isJust maybeText
