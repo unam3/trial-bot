@@ -4,7 +4,8 @@
 
 module Bot
     (
-    cycleEcho
+    cycleEcho,
+    Config
     ) where
 
 import Control.Monad (replicateM_, void)
@@ -176,12 +177,17 @@ instance ToJSON RepeatRequest
 instance FromJSON RepeatRequest
 
 
+type TokenSection = Text
+type HelpMessage = Text
+type RepeatMessage = Text
+type NumberOfRepeats = Text
+type Config = (TokenSection, HelpMessage, RepeatMessage, NumberOfRepeats)
 
 isRepeat :: Maybe Text -> Bool
 isRepeat (Just "/repeat") = True;
 isRepeat _ = False;
 
-sendMessage :: (Text, Text, Text, Text) -> ChatID -> Maybe Text -> IO ResponseStatusJSON
+sendMessage :: Config -> ChatID -> Maybe Text -> IO ResponseStatusJSON
 sendMessage (tokenSection, helpMsg, _, _) chatID maybeText = let {
     apiMethod = "sendMessage";
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
@@ -197,7 +203,7 @@ sendMessage (tokenSection, helpMsg, _, _) chatID maybeText = let {
         (\ response -> return (responseBody response :: ResponseStatusJSON));
 } in runReq defaultHttpConfig runReqM
 
-sendPoll :: (Text, Text, Text, Text) -> ChatID -> IO ResponseStatusJSON
+sendPoll :: Config -> ChatID -> IO ResponseStatusJSON
 sendPoll (tokenSection, _, repeatMsg, echoRepeatNumber) chatID = let {
     apiMethod = "sendPoll";
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
@@ -232,10 +238,10 @@ getLatestSupportedUpdate rjson = let {
     updates = result rjson;
 } in getSupportedUpdate $ reverse updates
 
-cycleEcho' :: (Text, Text, Text, Text) -> Maybe ResponseJSON -> IO ResponseJSON
-cycleEcho' args@(_, _, _, echoRepeatNumberText) maybeRJSON = let {
+cycleEcho' :: Config -> Maybe ResponseJSON -> IO ResponseJSON
+cycleEcho' config@(_, _, _, echoRepeatNumberText) maybeRJSON = let {
         maybeOffset = maybe Nothing getUpdateId maybeRJSON;
-    } in getUpdates args maybeOffset >>=
+    } in getUpdates config maybeOffset >>=
 
     \ ioRJSON -> print ioRJSON
 
@@ -243,18 +249,18 @@ cycleEcho' args@(_, _, _, echoRepeatNumberText) maybeRJSON = let {
     >>= \ latestSupportedUpdate -> print latestSupportedUpdate
     >> case latestSupportedUpdate of
         Just (Left (chatID, maybeText)) -> if isRepeat maybeText
-            then void $ sendPoll args chatID
-            else replicateM_ (getInt echoRepeatNumberText) (sendMessage args chatID maybeText)
+            then void $ sendPoll config chatID
+            else replicateM_ (getInt echoRepeatNumberText) (sendMessage config chatID maybeText)
         _ -> return ()
 
     >> let {
-        (tokenSection, helpMsg, repeatMsg, _) = args;
-        args' = case latestSupportedUpdate of
+        (tokenSection, helpMsg, repeatMsg, _) = config;
+        config' = case latestSupportedUpdate of
             Just (Right pollOption) -> (tokenSection, helpMsg, repeatMsg, (text :: PollOption -> Text) pollOption)
-            _ -> args;
-    } in cycleEcho' args' $ Just ioRJSON
+            _ -> config;
+    } in cycleEcho' config' $ Just ioRJSON
 
-cycleEcho :: (Text, Text, Text, Text) -> IO ResponseJSON
-cycleEcho args = let {
+cycleEcho :: Config -> IO ResponseJSON
+cycleEcho config = let {
     noRJSON = Nothing;
-} in cycleEcho' args noRJSON
+} in cycleEcho' config noRJSON

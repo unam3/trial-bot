@@ -1,11 +1,11 @@
 module Main where
 
-import Data.Text (Text, append, pack)
+import Data.Text (append, pack)
 import System.Environment (getArgs)
-import Bot (cycleEcho)
+import Bot (cycleEcho, Config)
 
 
-processArgs :: [String] -> Maybe (Text, Text, Text, Text)
+processArgs :: [String] -> Maybe Config
 processArgs [token, helpMsg, repeatMsg, echoRepeatNumberStr] = let {
     echoRepeatNumber = (read echoRepeatNumberStr :: Int);
     isInRange n = n > 0 && n < 6;
