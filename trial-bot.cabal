@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 42df208a8fc360768de5d07bd515987f65480e12d5f2e50e12228c8885b878a0
+-- hash: 742bb58321a7c1d31889bfd7de6ad4fcb5ce579842674623622c7b52918a6653
 
 name:           trial-bot
 version:        0.1.0.0
@@ -28,7 +28,6 @@ source-repository head
 library
   exposed-modules:
       Bot
-      Lib
   other-modules:
       Paths_trial_bot
   hs-source-dirs:

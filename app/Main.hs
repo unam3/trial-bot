@@ -1,6 +1,6 @@
 module Main where
 
-import Data.Text (Text, pack)
+import Data.Text (Text, append, pack)
 import System.Environment (getArgs)
 import Bot (cycleEcho)
 
@@ -11,7 +11,7 @@ processArgs [token, helpMsg, repeatMsg, echoRepeatNumberStr] = let {
     isInRange n = n > 0 && n < 6;
 } in if or [null token, null helpMsg, null repeatMsg, not $ isInRange echoRepeatNumber]
     then Nothing
-    else Just (pack token, pack helpMsg, pack repeatMsg, pack echoRepeatNumberStr)
+    else Just (append (pack "bot") $ pack token, pack helpMsg, pack repeatMsg, pack echoRepeatNumberStr)
 processArgs _ = Nothing
 
 main :: IO ()

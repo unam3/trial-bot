@@ -12,7 +12,7 @@ import Data.Aeson (FromJSON (parseJSON), ToJSON (toJSON), (.:), (.:?), withObjec
 import Data.Either (fromRight)
 import Data.Int (Int32, Int64)
 import Data.Maybe (isJust, fromJust)
-import Data.Text (Text, append, pack)
+import Data.Text (Text)
 import Data.Text.Read (decimal)
 import GHC.Generics (Generic)
 import Prelude hiding (id)
@@ -115,9 +115,8 @@ withUpdatesOffset :: Offset -> RequestJSON
 withUpdatesOffset updatesOffset = WithOffset {timeout = 20, offset = updatesOffset + 1}
 
 getUpdates :: (Text, Text, Text, Text) -> Maybe Offset -> IO ResponseJSON
-getUpdates (token, _, _, _) maybeOffset = let {
+getUpdates (tokenSection, _, _, _) maybeOffset = let {
     apiMethod = "getUpdates";
-    tokenSection = append ("bot" :: Text) token;
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
     body = ReqBodyJson $
         maybe (WithoutOffset {timeout = 20}) withUpdatesOffset maybeOffset;
@@ -183,9 +182,8 @@ isRepeat (Just "/repeat") = True;
 isRepeat _ = False;
 
 sendMessage :: (Text, Text, Text, Text) -> ChatID -> Maybe Text -> IO ResponseStatusJSON
-sendMessage (token, helpMsg, _, _) chatID maybeText = let {
+sendMessage (tokenSection, helpMsg, _, _) chatID maybeText = let {
     apiMethod = "sendMessage";
-    tokenSection = append ("bot" :: Text) token;
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
     commandOrText :: Text -> Text;
     commandOrText "/help" = helpMsg;
@@ -200,9 +198,8 @@ sendMessage (token, helpMsg, _, _) chatID maybeText = let {
 } in runReq defaultHttpConfig runReqM
 
 sendPoll :: (Text, Text, Text, Text) -> ChatID -> IO ResponseStatusJSON
-sendPoll (token, _, repeatMsg, echoRepeatNumber) chatID = let {
+sendPoll (tokenSection, _, repeatMsg, echoRepeatNumber) chatID = let {
     apiMethod = "sendPoll";
-    tokenSection = append ("bot" :: Text) token;
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
     request = RepeatRequest {
         question = mconcat ["Current number of repeats is ", echoRepeatNumber, ". ", repeatMsg],
@@ -215,7 +212,7 @@ sendPoll (token, _, repeatMsg, echoRepeatNumber) chatID = let {
 } in runReq defaultHttpConfig runReqM
 
 getInt :: Text -> Int
-getInt = fst . fromRight (1, pack "1") . decimal
+getInt = fst . fromRight (1, "1") . decimal
 
 type MaybeUpdateContent = Maybe (Either (ChatID, Maybe Text) PollOption)
 
@@ -251,9 +248,9 @@ cycleEcho' args@(_, _, _, echoRepeatNumberText) maybeRJSON = let {
         _ -> return ()
 
     >> let {
-        (token, helpMsg, repeatMsg, _) = args;
+        (tokenSection, helpMsg, repeatMsg, _) = args;
         args' = case latestSupportedUpdate of
-            Just (Right pollOption) -> (token, helpMsg, repeatMsg, (text :: PollOption -> Text) pollOption)
+            Just (Right pollOption) -> (tokenSection, helpMsg, repeatMsg, (text :: PollOption -> Text) pollOption)
             _ -> args;
     } in cycleEcho' args' $ Just ioRJSON
 
