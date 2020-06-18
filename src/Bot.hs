@@ -19,6 +19,7 @@ import GHC.Generics (Generic)
 import Prelude hiding (id)
 --import qualified Prelude (id)
 import Network.HTTP.Req
+import System.Log.Logger (Priority (DEBUG), debugM, setLevel, updateGlobalLogger)
 
 
 type Offset = Int32
@@ -243,10 +244,10 @@ cycleEcho' config@(_, _, _, echoRepeatNumberText) maybeRJSON = let {
         maybeOffset = maybe Nothing getUpdateId maybeRJSON;
     } in getUpdates config maybeOffset >>=
 
-    \ ioRJSON -> print ioRJSON
+    \ ioRJSON -> debugM "trial-bot.bot" (show ioRJSON)
 
     >> return (getLatestSupportedUpdate ioRJSON)
-    >>= \ latestSupportedUpdate -> print latestSupportedUpdate
+    >>= \ latestSupportedUpdate -> debugM "trial-bot.bot" (show latestSupportedUpdate)
     >> case latestSupportedUpdate of
         Just (Left (chatID, maybeText)) -> if isRepeat maybeText
             then void $ sendPoll config chatID
@@ -263,4 +264,5 @@ cycleEcho' config@(_, _, _, echoRepeatNumberText) maybeRJSON = let {
 cycleEcho :: Config -> IO ResponseJSON
 cycleEcho config = let {
     noRJSON = Nothing;
-} in cycleEcho' config noRJSON
+} in updateGlobalLogger "trial-bot.bot" (setLevel DEBUG)
+    >> cycleEcho' config noRJSON
