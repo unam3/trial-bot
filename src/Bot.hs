@@ -5,7 +5,15 @@
 module Bot
     (
     cycleEcho,
-    Config
+    getInt,
+    getLatestSupportedUpdate,
+    Chat (..),
+    ChatID,
+    Config,
+    Message (..),
+    Offset,
+    ResponseJSON (..),
+    Update (..)
     ) where
 
 import Control.Monad (replicateM_, void)
@@ -49,7 +57,7 @@ instance FromJSON Chat where
 data PollOption = PollOption {
     text :: Text,
     voter_count :: Int
-} deriving (Show, Generic)
+} deriving (Show, Generic, Eq)
 
 instance ToJSON PollOption
 instance FromJSON PollOption where
@@ -84,11 +92,7 @@ data Update = Update {
 } deriving (Show, Generic)
 
 instance ToJSON Update
-instance FromJSON Update where
-    parseJSON = withObject "Update" $ \v -> Update
-        <$> v .: "update_id"
-        <*> v .:? "message"
-        <*> v .:? "poll"
+instance FromJSON Update
 
 
 newtype ResponseStatusJSON = RSJSON {
