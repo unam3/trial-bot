@@ -23,10 +23,22 @@ spec = do
             ok = True,
             result = [
                 Update {
-                    update_id = 858301203,
-                    message = Just (Message {chat = Chat {id = 123456789}, text = Just "tost"}),
-                    poll = Nothing}
+                    update_id = 858301205,
+                    message = Just (Message {chat = Chat {id = 123456789}, text = Just "44"}),
+                    poll = Nothing
+                },
+                Update {
+                    update_id = 858301206,
+                    message = Just (Message {chat = Chat {id = 123456789}, text = Just "11"}),
+                    poll = Nothing
+                },
+                -- unsupported update
+                Update {
+                    update_id = 858301207,
+                    message = Just (Message {chat = Chat {id = 123456789}, text = Nothing}),
+                    poll = Nothing
+                }
             ]}
-            latestSupportedUpdate = Just (Left (123456789,Just "tost"))
+            latestSupportedUpdate = Just (Left (123456789,Just "11"))
         it "returns latest supported update" $
             getLatestSupportedUpdate responseWithUpdates `shouldBe` latestSupportedUpdate
