@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module TrialBot.BotSpec where
+module Tg.BotSpec where
 
-import Bot (
-    getInt, getLatestSupportedUpdate, Chat (..), ChatID, Message (..), Offset, ResponseJSON (..),
+import Tg (
+    getInt, getLatestSupportedUpdate, Chat (..), Message (..), ResponseJSON (..),
     Update (..))
 import Data.Text (Text)
 import Prelude hiding (id)

@@ -2,14 +2,13 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 
-module Bot
+module Tg
     (
-    cycleEcho,
     getInt,
     getLatestSupportedUpdate,
+    startBotWithLogger,
     Chat (..),
     ChatID,
-    Config,
     Message (..),
     Offset,
     ResponseJSON (..),
@@ -21,13 +20,14 @@ import Data.Aeson (FromJSON (parseJSON), ToJSON (toJSON), (.:), (.:?), withObjec
 import Data.Either (fromRight)
 import Data.Int (Int32, Int64)
 import Data.Maybe (isJust, fromJust)
-import Data.Text (Text)
+import Data.Text (Text, append, pack)
 import Data.Text.Read (decimal)
 import GHC.Generics (Generic)
 import Prelude hiding (id)
 --import qualified Prelude (id)
 import Network.HTTP.Req
-import System.Log.Logger (Priority (DEBUG), debugM, setLevel, updateGlobalLogger)
+import System.Environment (getArgs)
+import System.Log.Logger (Priority (DEBUG, ERROR), debugM, setLevel, traplogging, updateGlobalLogger)
 
 
 type Offset = Int32
@@ -270,3 +270,26 @@ cycleEcho config = let {
     noRJSON = Nothing;
 } in updateGlobalLogger "trial-bot.bot" (setLevel DEBUG)
     >> cycleEcho' config noRJSON
+
+
+processArgs :: [String] -> Maybe Config
+processArgs [token, helpMsg, repeatMsg, echoRepeatNumberStr] = let {
+    echoRepeatNumber = (read echoRepeatNumberStr :: Int);
+    isInRange n = n > 0 && n < 6;
+} in if or [null token, null helpMsg, null repeatMsg, not $ isInRange echoRepeatNumber]
+    then Nothing
+    else Just (append "bot" $ pack token, pack helpMsg, pack repeatMsg, pack echoRepeatNumberStr)
+processArgs _ = Nothing
+
+startBot :: IO ()
+startBot = do
+    args <- getArgs
+    case args of
+        [_, _, _, _] -> case processArgs args of
+            Just args' -> cycleEcho args' >> return ()
+            Nothing -> error "error: some argument passed from command line is wrong"
+        _ -> error "error: exactly four arguments needed: token, helpMsg, repeatMsg, echoRepeatNumber"
+
+
+startBotWithLogger :: IO ()
+startBotWithLogger = traplogging "trial-bot.main" ERROR "Bot shutdown due to" startBot
