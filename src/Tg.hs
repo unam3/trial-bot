@@ -281,10 +281,10 @@ processArgs [token, helpMsg, repeatMsg, echoRepeatNumberStr] = let {
 processArgs _ = Nothing
 
 startBot :: [String] -> IO ()
-startBot args = do
+startBot args =
     case args of
         [_, _, _, _] -> case processArgs args of
-            Just args' -> cycleEcho args' >> return ()
+            Just args' -> void $ cycleEcho args'
             Nothing -> error "error: some argument passed from command line is wrong"
         _ -> error "error: exactly four arguments needed: token, helpMsg, repeatMsg, echoRepeatNumber"
 
