@@ -26,7 +26,6 @@ import GHC.Generics (Generic)
 import Prelude hiding (id)
 --import qualified Prelude (id)
 import Network.HTTP.Req
-import System.Environment (getArgs)
 import System.Log.Logger (Priority (DEBUG, ERROR), debugM, setLevel, traplogging, updateGlobalLogger)
 
 
@@ -281,9 +280,8 @@ processArgs [token, helpMsg, repeatMsg, echoRepeatNumberStr] = let {
     else Just (append "bot" $ pack token, pack helpMsg, pack repeatMsg, pack echoRepeatNumberStr)
 processArgs _ = Nothing
 
-startBot :: IO ()
-startBot = do
-    args <- getArgs
+startBot :: [String] -> IO ()
+startBot args = do
     case args of
         [_, _, _, _] -> case processArgs args of
             Just args' -> cycleEcho args' >> return ()
@@ -291,5 +289,5 @@ startBot = do
         _ -> error "error: exactly four arguments needed: token, helpMsg, repeatMsg, echoRepeatNumber"
 
 
-startBotWithLogger :: IO ()
-startBotWithLogger = traplogging "trial-bot.main" ERROR "Bot shutdown due to" startBot
+startBotWithLogger :: [String] -> IO ()
+startBotWithLogger args = traplogging "trial-bot.main" ERROR "Bot shutdown due to" $ startBot args
