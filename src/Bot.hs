@@ -42,10 +42,10 @@ instance FromJSON Chat where
         <$> v .: "id"
 
 
-type UserID = Int32
+type Username = Text
 
 newtype User = User {
-    id :: UserID
+    username :: Username
 } deriving (Show, Generic)
 
 instance ToJSON User
@@ -118,7 +118,7 @@ getUpdateId rjson = let {
     updates = result rjson;
 } in if null updates then Nothing else Just (update_id $ last updates)
 
-getTextMessages :: ResponseJSON -> IO (Maybe [(ChatID, Maybe Text, Maybe UserID)])
+getTextMessages :: ResponseJSON -> IO (Maybe [(ChatID, Maybe Text, Maybe Username)])
 getTextMessages rjson = let {
     updates = result rjson;
 } in return $ if null updates
@@ -126,9 +126,9 @@ getTextMessages rjson = let {
     else Just .
         fmap (
             (\ msg -> (
-                (id :: Chat -> ChatID) $ chat msg,
+                id $ chat msg,
                 mtext msg,
-                maybe Nothing (Just . (id :: User -> UserID)) $ from msg 
+                maybe Nothing (Just . username) $ from msg 
             )) . fromJust
         ) .
         filter (\ maybeMsg ->   
@@ -169,12 +169,12 @@ instance FromJSON EchoRequest where
     parseJSON = genericParseJSON defaultOptions { omitNothingFields = True }
 
 
-sendMessage :: (Text, Text, Text, Text) -> ChatID -> Maybe Text -> Maybe UserID -> IO ResponseStatusJSON
-sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID maybeText maybeUserID = let {
+sendMessage :: (Text, Text, Text, Text) -> ChatID -> Maybe Text -> Maybe Username -> IO ResponseStatusJSON
+sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID maybeText maybeUsername = let {
     apiMethod = "sendMessage";
     tokenSection = append ("bot" :: Text) token;
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
-    mention = pack . show $ fromJust maybeUserID;
+    mention = fromJust maybeUsername;
     commandOrText :: Text -> Text;
     commandOrText "/help" = helpMsg;
     commandOrText "/repeat" = mconcat ["@", mention, " Current number of repeats is ", echoRepeatNumber, ". ", repeatMsg];
@@ -204,7 +204,7 @@ cycleEcho' args rjson = getUpdates args (getUpdateId rjson) >>=
     >>= \ textMessages -> print textMessages
     >> case textMessages of
         Nothing -> return ()
-        Just list -> forM_ list (\ (chatID, maybeText, maybeUserID) -> sendMessage args chatID maybeText maybeUserID)
+        Just list -> forM_ list (\ (chatID, maybeText, maybeUsername) -> sendMessage args chatID maybeText maybeUsername)
     >> cycleEcho' args ioRJSON
 
 cycleEcho :: (Text, Text, Text, Text) -> IO ResponseJSON
@@ -214,5 +214,5 @@ cycleEcho args = getUpdates args Nothing >>=
     >>= \ textMessages -> print textMessages
     >> case textMessages of
         Nothing -> return ()
-        Just list -> forM_ list (\ (chatID, maybeText, maybeUserID) -> sendMessage args chatID maybeText maybeUserID)
+        Just list -> forM_ list (\ (chatID, maybeText, maybeUsername) -> sendMessage args chatID maybeText maybeUsername)
     >> cycleEcho' args ioRJSON
