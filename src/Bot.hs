@@ -11,7 +11,7 @@ import Control.Monad (forM_)
 import Data.Aeson (FromJSON (parseJSON), ToJSON (toJSON), (.:), (.:?), withObject, genericParseJSON, genericToJSON, defaultOptions, omitNothingFields)
 import Data.Int (Int32, Int64)
 import Data.Maybe (isJust, fromJust)
-import Data.Text (Text, append)
+import Data.Text (Text, append, pack)
 import GHC.Generics (Generic)
 import Prelude hiding (id)
 import Network.HTTP.Req
@@ -41,9 +41,21 @@ instance FromJSON Chat where
     parseJSON = withObject "Chat" $ \v -> Chat
         <$> v .: "id"
 
+
+type UserID = Int32
+
+newtype User = User {
+    id :: UserID
+} deriving (Show, Generic)
+
+instance ToJSON User
+instance FromJSON User
+
+
 data Message = Message {
     chat :: Chat,
-    text :: Maybe Text
+    text :: Maybe Text,
+    from :: Maybe User
 } deriving (Show, Generic)
 
 instance ToJSON Message
@@ -51,6 +63,7 @@ instance FromJSON Message where
     parseJSON = withObject "Message" $ \v -> Message
         <$> v .: "chat"
         <*> v .:? "text"
+        <*> v .:? "from"
 
 mtext :: Message -> Maybe Text
 mtext = text
@@ -105,14 +118,24 @@ getUpdateId rjson = let {
     updates = result rjson;
 } in if null updates then Nothing else Just (update_id $ last updates)
 
-getTextMessages :: ResponseJSON -> IO (Maybe [(ChatID, Maybe Text)])
+getTextMessages :: ResponseJSON -> IO (Maybe [(ChatID, Maybe Text, Maybe UserID)])
 getTextMessages rjson = let {
     updates = result rjson;
 } in return $ if null updates
     then Nothing
     else Just .
-        fmap ((\ msg -> (id . chat  $ msg, mtext msg)) . fromJust) .
-        filter (\ maybeMsg -> isJust maybeMsg && (isJust . mtext $ fromJust maybeMsg)) $
+        fmap (
+            (\ msg -> (
+                (id :: Chat -> ChatID) $ chat msg,
+                mtext msg,
+                maybe Nothing (Just . (id :: User -> UserID)) $ from msg 
+            )) . fromJust
+        ) .
+        filter (\ maybeMsg ->   
+            isJust maybeMsg
+            && (isJust . mtext $ fromJust maybeMsg)
+            -- && (isJust . from $ fromJust maybeMsg)
+        ) $
         fmap message updates
 
 
@@ -125,7 +148,8 @@ instance FromJSON KeyboardButton
 
 data ReplyKeyboardMarkup = ReplyKeyboardMarkup {
     keyboard :: [[KeyboardButton]],
-    one_time_keyboard :: Bool
+    one_time_keyboard :: Bool,
+    selective :: Bool
 } deriving (Show, Generic)
 
 instance ToJSON ReplyKeyboardMarkup
@@ -145,14 +169,15 @@ instance FromJSON EchoRequest where
     parseJSON = genericParseJSON defaultOptions { omitNothingFields = True }
 
 
-sendMessage :: (Text, Text, Text, Text) -> ChatID -> Maybe Text -> IO ResponseStatusJSON
-sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID maybeText  = let {
+sendMessage :: (Text, Text, Text, Text) -> ChatID -> Maybe Text -> Maybe UserID -> IO ResponseStatusJSON
+sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID maybeText maybeUserID = let {
     apiMethod = "sendMessage";
     tokenSection = append ("bot" :: Text) token;
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
+    mention = pack . show $ fromJust maybeUserID;
     commandOrText :: Text -> Text;
     commandOrText "/help" = helpMsg;
-    commandOrText "/repeat" = mconcat ["Current number of repeats is ", echoRepeatNumber, ". ", repeatMsg];
+    commandOrText "/repeat" = mconcat ["@", mention, " Current number of repeats is ", echoRepeatNumber, ". ", repeatMsg];
     commandOrText text = text;
     isRepeat (Just "/repeat") = True;
     isRepeat _ = False;
@@ -163,7 +188,7 @@ sendMessage (token, helpMsg, repeatMsg, echoRepeatNumber) chatID maybeText  = le
             then let {
                 buttons = [[KeyboardButton {text = "1"}, KeyboardButton {text = "2"}, KeyboardButton {text = "3"},
                     KeyboardButton {text = "4"}, KeyboardButton {text = "5"}]];
-            } in Just ReplyKeyboardMarkup {keyboard = buttons, one_time_keyboard = True}
+            } in Just ReplyKeyboardMarkup {keyboard = buttons, one_time_keyboard = True, selective = True}
             else Nothing
     };
     body = ReqBodyJson echoRequest;
@@ -179,7 +204,7 @@ cycleEcho' args rjson = getUpdates args (getUpdateId rjson) >>=
     >>= \ textMessages -> print textMessages
     >> case textMessages of
         Nothing -> return ()
-        Just list -> forM_ list (\ (chatID, maybeText) -> sendMessage args chatID maybeText)
+        Just list -> forM_ list (\ (chatID, maybeText, maybeUserID) -> sendMessage args chatID maybeText maybeUserID)
     >> cycleEcho' args ioRJSON
 
 cycleEcho :: (Text, Text, Text, Text) -> IO ResponseJSON
@@ -189,5 +214,5 @@ cycleEcho args = getUpdates args Nothing >>=
     >>= \ textMessages -> print textMessages
     >> case textMessages of
         Nothing -> return ()
-        Just list -> forM_ list (\ (chatID, maybeText) -> sendMessage args chatID maybeText)
+        Just list -> forM_ list (\ (chatID, maybeText, maybeUserID) -> sendMessage args chatID maybeText maybeUserID)
     >> cycleEcho' args ioRJSON
