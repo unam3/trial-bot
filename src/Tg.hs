@@ -24,7 +24,6 @@ import Data.Text (Text, append, pack)
 import Data.Text.Read (decimal)
 import GHC.Generics (Generic)
 import Prelude hiding (id)
---import qualified Prelude (id)
 import Network.HTTP.Req
 import System.Log.Logger (Priority (DEBUG, ERROR), debugM, setLevel, traplogging, updateGlobalLogger)
 
@@ -77,12 +76,22 @@ instance FromJSON Message where
         <*> v .:? "text"
         <*> v .:? "from"
 
+
+data CallbackQuery = CallbackQuery {
+    _id :: Text,
+    _data :: Text,
+    _from :: User
+} deriving (Show, Generic)
+
+instance ToJSON CallbackQuery
+instance FromJSON CallbackQuery where
+    parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 1}
+
+
 data Update = Update {
     update_id :: Offset,
     message :: Maybe Message,
-    --
-    poll :: Maybe Poll
-    --
+    callback_query :: Maybe CallbackQuery
 } deriving (Show, Generic)
 
 instance ToJSON Update
@@ -130,26 +139,26 @@ getUpdateId rjson = let {
 } in if null updates then Nothing else Just (update_id $ last updates)
 
 
-data KeyboardButton = KeyboardButton {
-    text :: Text
+data InlineKeyboardButton = InlineKeyboardButton {
+    text :: Text,
+    -- 1-64 bytes ( https://core.telegram.org/bots/api#inlinekeyboardbutton  )
+    callback_data :: Text
 } deriving (Show, Generic)
 
-instance ToJSON KeyboardButton
+instance ToJSON InlineKeyboardButton
 
 
-data ReplyKeyboardMarkup = ReplyKeyboardMarkup {
-    keyboard :: [[KeyboardButton]],
-    one_time_keyboard :: Bool,
-    selective :: Bool
+newtype InlineKeyboardMarkup = InlineKeyboardMarkup {
+    inline_keyboard :: [[InlineKeyboardButton]]
 } deriving (Show, Generic)
 
-instance ToJSON ReplyKeyboardMarkup
+instance ToJSON InlineKeyboardMarkup
 
 
 data EchoRequest = EchoRequest {
     chat_id :: ChatID,
     text :: Text,
-    reply_markup :: Maybe ReplyKeyboardMarkup
+    reply_markup :: Maybe InlineKeyboardMarkup
 } deriving (Show, Generic)
 
 instance ToJSON EchoRequest where
@@ -161,10 +170,6 @@ type HelpMessage = Text
 type RepeatMessage = Text
 type NumberOfRepeats = Text
 type Config = (TokenSection, HelpMessage, RepeatMessage, NumberOfRepeats)
--- data State = State {
---     config :: Config,
--- 
--- }
 
 respondToMessage :: Config -> ChatID -> Maybe Text -> Maybe Username -> IO ResponseStatusJSON
 respondToMessage (tokenSection, helpMsg, echoRepeatNumber, repeatMsg) chatID maybeText maybeUsername = let {
@@ -183,13 +188,13 @@ respondToMessage (tokenSection, helpMsg, echoRepeatNumber, repeatMsg) chatID may
         reply_markup = if isRepeat maybeText 
             then let {
                 buttons = [[
-                    KeyboardButton {text = "1"},
-                    KeyboardButton {text = "2"},
-                    KeyboardButton {text = "3"},
-                    KeyboardButton {text = "4"},
-                    KeyboardButton {text = "5"}
+                    InlineKeyboardButton {text = "1", callback_data = "repeat1"},
+                    InlineKeyboardButton {text = "2", callback_data = "repeat2"},
+                    InlineKeyboardButton {text = "3", callback_data = "repeat3"},
+                    InlineKeyboardButton {text = "4", callback_data = "repeat4"},
+                    InlineKeyboardButton {text = "5", callback_data = "repeat5"}
                 ]];
-            } in Just ReplyKeyboardMarkup {keyboard = buttons, one_time_keyboard = True, selective = True}
+            } in Just InlineKeyboardMarkup {inline_keyboard = buttons}
             else Nothing
     };
     body = ReqBodyJson request;
@@ -200,43 +205,17 @@ respondToMessage (tokenSection, helpMsg, echoRepeatNumber, repeatMsg) chatID may
 getInt :: Text -> Int
 getInt = fst . fromRight (1, "1") . decimal
 
-data PollOption = PollOption {
-    text :: Text,
-    voter_count :: Int
-} deriving (Show, Generic, Eq)
-
-instance ToJSON PollOption
-instance FromJSON PollOption where
-    parseJSON = withObject "PollOption" $ \v -> PollOption
-        <$> v .: "text"
-        <*> v .: "voter_count"
-
-type MaybeUpdateContent = Maybe (Either (ChatID, Maybe Text, Maybe Username) PollOption)
-
-
---
-newtype Poll = Poll {
-    options :: [PollOption]
-} deriving (Show, Generic)
- 
-instance ToJSON Poll
-instance FromJSON Poll where
-    parseJSON = withObject "Poll" $ \v -> Poll
-        <$> v .: "options"
---
+type MaybeUpdateContent = Maybe (Either (ChatID, Maybe Text, Maybe Username) CallbackQuery)
 
 getSupportedUpdate :: [Update] -> MaybeUpdateContent
 getSupportedUpdate (update : updateList) = let {
     maybeMessage = message update;
     maybeText = maybe Nothing (text :: Message -> Maybe Text) maybeMessage;
-    maybeUsername = maybe Nothing (maybe Nothing (Just . username) . from) maybeMessage;
-
-    maybeUpdateWithPoll = poll update;
-    extractVotedPollOption = head . filter ((> 0) . voter_count) . (options :: Poll -> [PollOption]);
-
+    maybeUsername = maybe Nothing (fmap username . from) maybeMessage;
+    maybeCallbackQuery = callback_query update;
 } in if isJust maybeText && isJust maybeUsername
     then Just $ Left (id . (chat :: Message -> Chat) $ fromJust maybeMessage, maybeText, maybeUsername)
-    else maybe (getSupportedUpdate updateList) (Just . Right . extractVotedPollOption) maybeUpdateWithPoll
+    else maybe (getSupportedUpdate updateList) (Just . Right) maybeCallbackQuery
 getSupportedUpdate [] = Nothing
 
 getLatestSupportedUpdate :: ResponseJSON -> MaybeUpdateContent
@@ -246,10 +225,33 @@ getLatestSupportedUpdate rjson = let {
 
 
 isRepeat :: Maybe Text -> Bool
-isRepeat = maybe False (== "/repeat");
+isRepeat = (== Just "/repeat");
 
 isHelp :: Maybe Text -> Bool
-isHelp = maybe False (== "/help");
+isHelp = (== Just "/help");
+
+getNumberOfRepeats :: Text -> Text
+getNumberOfRepeats "repeat5" = "5"
+getNumberOfRepeats "repeat4" = "4"
+getNumberOfRepeats "repeat3" = "3"
+getNumberOfRepeats "repeat2" = "2"
+getNumberOfRepeats _ = "1"
+
+newtype AnswerCallbackRequest = AnswerCallbackRequest {
+    callback_query_id :: Text
+} deriving (Show, Generic)
+
+instance ToJSON AnswerCallbackRequest
+
+answerCallbackQuery :: Config -> CallbackQuery -> IO ResponseStatusJSON
+answerCallbackQuery (tokenSection, _, _, _) callbackQuery = let {
+    apiMethod = "answerCallbackQuery";
+    urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
+    body = ReqBodyJson $ AnswerCallbackRequest { callback_query_id = _id callbackQuery};
+    runReqMonad = req POST urlScheme body jsonResponse mempty >>=
+        (\ response -> return (responseBody response :: ResponseStatusJSON));
+} in runReq defaultHttpConfig runReqMonad
+
 
 cycleEcho' :: Config -> Maybe ResponseJSON -> IO ResponseJSON
 cycleEcho' config@(_, _, _, echoRepeatNumberText) maybeRJSON = let {
@@ -269,10 +271,15 @@ cycleEcho' config@(_, _, _, echoRepeatNumberText) maybeRJSON = let {
             } in replicateM_ numberOfRepeats $ respondToMessage config chatID maybeText maybeUsername
         _ -> return ()
 
+    -- https://core.telegram.org/bots/api#answercallbackquery
+    >> case latestSupportedUpdate of
+        Just (Right callbackQuery) -> void $ answerCallbackQuery config callbackQuery
+        _ -> return ()
+
     >> let {
         (tokenSection, helpMsg, repeatMsg, _) = config;
         config' = case latestSupportedUpdate of
-            Just (Right pollOption) -> (tokenSection, helpMsg, repeatMsg, (text :: PollOption -> Text) pollOption)
+            Just (Right callbackQuery) -> (tokenSection, helpMsg, repeatMsg, getNumberOfRepeats $ _data callbackQuery)
             _ -> config;
     } in cycleEcho' config' $ Just ioRJSON
 
