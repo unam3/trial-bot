@@ -53,29 +53,21 @@ instance FromJSON Chat where
     parseJSON = withObject "Chat" $ \v -> Chat
         <$> v .: "id"
 
-data PollOption = PollOption {
-    text :: Text,
-    voter_count :: Int
-} deriving (Show, Generic, Eq)
 
-instance ToJSON PollOption
-instance FromJSON PollOption where
-    parseJSON = withObject "PollOption" $ \v -> PollOption
-        <$> v .: "text"
-        <*> v .: "voter_count"
+type Username = Text
 
-newtype Poll = Poll {
-    options :: [PollOption]
+newtype User = User {
+    username :: Username
 } deriving (Show, Generic)
 
-instance ToJSON Poll
-instance FromJSON Poll where
-    parseJSON = withObject "Poll" $ \v -> Poll
-        <$> v .: "options"
+instance ToJSON User
+instance FromJSON User
+
 
 data Message = Message {
     chat :: Chat,
-    text :: Maybe Text
+    text :: Maybe Text,
+    from :: Maybe User
 } deriving (Show, Generic)
 
 instance ToJSON Message
@@ -83,11 +75,14 @@ instance FromJSON Message where
     parseJSON = withObject "Message" $ \v -> Message
         <$> v .: "chat"
         <*> v .:? "text"
+        <*> v .:? "from"
 
 data Update = Update {
     update_id :: Offset,
     message :: Maybe Message,
+    --
     poll :: Maybe Poll
+    --
 } deriving (Show, Generic)
 
 instance ToJSON Update
@@ -134,87 +129,68 @@ getUpdateId rjson = let {
     updates = result rjson;
 } in if null updates then Nothing else Just (update_id $ last updates)
 
-newtype KeyboardButtonPollType = KeyboardButtonPollType {
-    _type :: Maybe Text
-} deriving (Show, Generic)
-
-instance ToJSON KeyboardButtonPollType where
-    toJSON = genericToJSON defaultOptions { omitNothingFields = True, fieldLabelModifier = drop 1 }
-
-instance FromJSON KeyboardButtonPollType where
-    parseJSON = genericParseJSON defaultOptions { omitNothingFields = True, fieldLabelModifier = drop 1 }
 
 data KeyboardButton = KeyboardButton {
-    text :: Text,
-    request_poll :: KeyboardButtonPollType
+    text :: Text
 } deriving (Show, Generic)
 
 instance ToJSON KeyboardButton
-instance FromJSON KeyboardButton
+
 
 data ReplyKeyboardMarkup = ReplyKeyboardMarkup {
     keyboard :: [[KeyboardButton]],
-    one_time_keyboard :: Bool
+    one_time_keyboard :: Bool,
+    selective :: Bool
 } deriving (Show, Generic)
 
 instance ToJSON ReplyKeyboardMarkup
-instance FromJSON ReplyKeyboardMarkup
 
 
 data EchoRequest = EchoRequest {
     chat_id :: ChatID,
-    text :: Text
+    text :: Text,
+    reply_markup :: Maybe ReplyKeyboardMarkup
 } deriving (Show, Generic)
 
-instance ToJSON EchoRequest
-instance FromJSON EchoRequest
-
-
-data RepeatRequest = RepeatRequest {
-    chat_id :: ChatID,
-    question :: Text,
-    options :: [Text]
-    --reply_markup :: ReplyKeyboardMarkup
-} deriving (Show, Generic)
-
-instance ToJSON RepeatRequest
-instance FromJSON RepeatRequest
-
+instance ToJSON EchoRequest where
+    toJSON = genericToJSON defaultOptions { omitNothingFields = True }
+ 
 
 type TokenSection = Text
 type HelpMessage = Text
 type RepeatMessage = Text
 type NumberOfRepeats = Text
 type Config = (TokenSection, HelpMessage, RepeatMessage, NumberOfRepeats)
+-- data State = State {
+--     config :: Config,
+-- 
+-- }
 
-isRepeat :: Maybe Text -> Bool
-isRepeat (Just "/repeat") = True;
-isRepeat _ = False;
-
-sendMessage :: Config -> ChatID -> Maybe Text -> IO ResponseStatusJSON
-sendMessage (tokenSection, helpMsg, _, _) chatID maybeText = let {
+respondToMessage :: Config -> ChatID -> Maybe Text -> Maybe Username -> IO ResponseStatusJSON
+respondToMessage (tokenSection, helpMsg, echoRepeatNumber, repeatMsg) chatID maybeText maybeUsername = let {
     apiMethod = "sendMessage";
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
+    mention = fromJust maybeUsername;
     commandOrText :: Text -> Text;
     commandOrText "/help" = helpMsg;
+    commandOrText "/repeat" = mconcat [
+        "@", mention, " Current number of repeats is ", echoRepeatNumber, ". ", repeatMsg
+    ];
     commandOrText t = t;
     request = EchoRequest {
         text = maybe "default answer if no \"text\" field" commandOrText maybeText,
-        chat_id = chatID
-    };
-    body = ReqBodyJson request;
-    runReqM = req POST urlScheme body jsonResponse mempty >>=
-        (\ response -> return (responseBody response :: ResponseStatusJSON));
-} in runReq defaultHttpConfig runReqM
-
-sendPoll :: Config -> ChatID -> IO ResponseStatusJSON
-sendPoll (tokenSection, _, repeatMsg, echoRepeatNumber) chatID = let {
-    apiMethod = "sendPoll";
-    urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
-    request = RepeatRequest {
-        question = mconcat ["Current number of repeats is ", echoRepeatNumber, ". ", repeatMsg],
         chat_id = chatID,
-        options = ["1", "2", "3", "4", "5"]
+        reply_markup = if isRepeat maybeText 
+            then let {
+                buttons = [[
+                    KeyboardButton {text = "1"},
+                    KeyboardButton {text = "2"},
+                    KeyboardButton {text = "3"},
+                    KeyboardButton {text = "4"},
+                    KeyboardButton {text = "5"}
+                ]];
+            } in Just ReplyKeyboardMarkup {keyboard = buttons, one_time_keyboard = True, selective = True}
+            else Nothing
     };
     body = ReqBodyJson request;
     runReqM = req POST urlScheme body jsonResponse mempty >>=
@@ -224,16 +200,42 @@ sendPoll (tokenSection, _, repeatMsg, echoRepeatNumber) chatID = let {
 getInt :: Text -> Int
 getInt = fst . fromRight (1, "1") . decimal
 
-type MaybeUpdateContent = Maybe (Either (ChatID, Maybe Text) PollOption)
+data PollOption = PollOption {
+    text :: Text,
+    voter_count :: Int
+} deriving (Show, Generic, Eq)
+
+instance ToJSON PollOption
+instance FromJSON PollOption where
+    parseJSON = withObject "PollOption" $ \v -> PollOption
+        <$> v .: "text"
+        <*> v .: "voter_count"
+
+type MaybeUpdateContent = Maybe (Either (ChatID, Maybe Text, Maybe Username) PollOption)
+
+
+--
+newtype Poll = Poll {
+    options :: [PollOption]
+} deriving (Show, Generic)
+ 
+instance ToJSON Poll
+instance FromJSON Poll where
+    parseJSON = withObject "Poll" $ \v -> Poll
+        <$> v .: "options"
+--
 
 getSupportedUpdate :: [Update] -> MaybeUpdateContent
 getSupportedUpdate (update : updateList) = let {
     maybeMessage = message update;
     maybeText = maybe Nothing (text :: Message -> Maybe Text) maybeMessage;
+    maybeUsername = maybe Nothing (maybe Nothing (Just . username) . from) maybeMessage;
+
     maybeUpdateWithPoll = poll update;
     extractVotedPollOption = head . filter ((> 0) . voter_count) . (options :: Poll -> [PollOption]);
-} in if isJust maybeText
-    then Just $ Left (id . (chat :: Message -> Chat) $ fromJust maybeMessage, maybeText)
+
+} in if isJust maybeText && isJust maybeUsername
+    then Just $ Left (id . (chat :: Message -> Chat) $ fromJust maybeMessage, maybeText, maybeUsername)
     else maybe (getSupportedUpdate updateList) (Just . Right . extractVotedPollOption) maybeUpdateWithPoll
 getSupportedUpdate [] = Nothing
 
@@ -241,6 +243,13 @@ getLatestSupportedUpdate :: ResponseJSON -> MaybeUpdateContent
 getLatestSupportedUpdate rjson = let {
     updates = result rjson;
 } in getSupportedUpdate $ reverse updates
+
+
+isRepeat :: Maybe Text -> Bool
+isRepeat = maybe False (== "/repeat");
+
+isHelp :: Maybe Text -> Bool
+isHelp = maybe False (== "/help");
 
 cycleEcho' :: Config -> Maybe ResponseJSON -> IO ResponseJSON
 cycleEcho' config@(_, _, _, echoRepeatNumberText) maybeRJSON = let {
@@ -252,9 +261,12 @@ cycleEcho' config@(_, _, _, echoRepeatNumberText) maybeRJSON = let {
     >> return (getLatestSupportedUpdate ioRJSON)
     >>= \ latestSupportedUpdate -> debugM "trial-bot.bot" (show latestSupportedUpdate)
     >> case latestSupportedUpdate of
-        Just (Left (chatID, maybeText)) -> if isRepeat maybeText
-            then void $ sendPoll config chatID
-            else replicateM_ (getInt echoRepeatNumberText) (sendMessage config chatID maybeText)
+        Just (Left (chatID, maybeText, maybeUsername)) ->
+            let {
+                numberOfRepeats = if isRepeat maybeText || isHelp maybeText
+                    then 1
+                    else getInt echoRepeatNumberText;
+            } in replicateM_ numberOfRepeats $ respondToMessage config chatID maybeText maybeUsername
         _ -> return ()
 
     >> let {
