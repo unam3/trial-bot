@@ -5,20 +5,22 @@
 module Tg
     (
     getInt,
-    getLatestSupportedUpdate,
+    getLatestSupportedUpdateContent,
     startBotWithLogger,
     Chat (..),
     ChatID,
     Message (..),
     Offset,
     ResponseJSON (..),
-    Update (..)
+    Update (..),
+    User (..)
     ) where
 
 import Control.Monad (replicateM_, void)
 import Data.Aeson (FromJSON (parseJSON), ToJSON (toJSON), (.:), (.:?), withObject, genericParseJSON, genericToJSON, defaultOptions, omitNothingFields, fieldLabelModifier)
 import Data.Either (fromRight)
 import Data.Int (Int32, Int64)
+import qualified Data.Map.Strict as M
 import Data.Maybe (isJust, fromJust)
 import Data.Text (Text, append, pack)
 import Data.Text.Read (decimal)
@@ -55,12 +57,14 @@ instance FromJSON Chat where
 
 type Username = Text
 
-newtype User = User {
-    username :: Username
-} deriving (Show, Generic)
+data User = User {
+    _username :: Maybe Username,
+    _id :: UserID
+} deriving (Show, Generic, Eq)
 
-instance ToJSON User
-instance FromJSON User
+--instance ToJSON User
+instance FromJSON User where
+    parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 1}
 
 
 data Message = Message {
@@ -69,7 +73,6 @@ data Message = Message {
     from :: Maybe User
 } deriving (Show, Generic)
 
-instance ToJSON Message
 instance FromJSON Message where
     parseJSON = withObject "Message" $ \v -> Message
         <$> v .: "chat"
@@ -81,9 +84,9 @@ data CallbackQuery = CallbackQuery {
     _id :: Text,
     _data :: Text,
     _from :: User
-} deriving (Show, Generic)
+} deriving (Show, Generic, Eq)
 
-instance ToJSON CallbackQuery
+--instance Eq CallbackQuery
 instance FromJSON CallbackQuery where
     parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 1}
 
@@ -94,7 +97,6 @@ data Update = Update {
     callback_query :: Maybe CallbackQuery
 } deriving (Show, Generic)
 
-instance ToJSON Update
 instance FromJSON Update
 
 
@@ -113,7 +115,6 @@ data ResponseJSON = RJSON {
     result :: [Update]
 } deriving (Show, Generic)
 
-instance ToJSON ResponseJSON
 instance FromJSON ResponseJSON where
     parseJSON = withObject "ResponseJSON" $ \v -> RJSON
         <$> v .: "ok"
@@ -123,8 +124,8 @@ instance FromJSON ResponseJSON where
 withUpdatesOffset :: Offset -> RequestJSON
 withUpdatesOffset updatesOffset = WithOffset {timeout = 20, offset = updatesOffset + 1}
 
-getUpdates :: (Text, Text, Text, Text) -> Maybe Offset -> IO ResponseJSON
-getUpdates (tokenSection, _, _, _) maybeOffset = let {
+getUpdates :: Config -> Maybe Offset -> IO ResponseJSON
+getUpdates (tokenSection, _, _, _, _) maybeOffset = let {
     apiMethod = "getUpdates";
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
     body = ReqBodyJson $
@@ -168,24 +169,26 @@ instance ToJSON EchoRequest where
 type TokenSection = Text
 type HelpMessage = Text
 type RepeatMessage = Text
+type UserID = Int64
 type NumberOfRepeats = Text
-type Config = (TokenSection, HelpMessage, RepeatMessage, NumberOfRepeats)
+type NumberOfRepeatsMap = M.Map UserID NumberOfRepeats
+type Config = (TokenSection, HelpMessage, RepeatMessage, NumberOfRepeats, NumberOfRepeatsMap)
 
-respondToMessage :: Config -> ChatID -> Maybe Text -> Maybe Username -> IO ResponseStatusJSON
-respondToMessage (tokenSection, helpMsg, echoRepeatNumber, repeatMsg) chatID maybeText maybeUsername = let {
+respondToMessage :: Config -> ChatID -> Text -> Username -> UserID -> IO ResponseStatusJSON
+respondToMessage (tokenSection, helpMsg, repeatMsg, echoRepeatNumberText, numberOfRepeatsMap) chatID msg username userID = let {
     apiMethod = "sendMessage";
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
-    mention = fromJust maybeUsername;
+    echoRepeatNumber = M.findWithDefault echoRepeatNumberText userID numberOfRepeatsMap;
     commandOrText :: Text -> Text;
     commandOrText "/help" = helpMsg;
     commandOrText "/repeat" = mconcat [
-        "@", mention, " Current number of repeats is ", echoRepeatNumber, ". ", repeatMsg
+        "@", username, " Current number of repeats is ", echoRepeatNumber, ". ", repeatMsg
     ];
     commandOrText t = t;
     request = EchoRequest {
-        text = maybe "default answer if no \"text\" field" commandOrText maybeText,
+        text = commandOrText msg,
         chat_id = chatID,
-        reply_markup = if isRepeat maybeText 
+        reply_markup = if isRepeatCommand msg 
             then let {
                 buttons = [[
                     InlineKeyboardButton {text = "1", callback_data = "repeat1"},
@@ -205,30 +208,39 @@ respondToMessage (tokenSection, helpMsg, echoRepeatNumber, repeatMsg) chatID may
 getInt :: Text -> Int
 getInt = fst . fromRight (1, "1") . decimal
 
-type MaybeUpdateContent = Maybe (Either (ChatID, Maybe Text, Maybe Username) CallbackQuery)
+type MaybeUpdateContent = Maybe (Either (ChatID, Text, Username, UserID) CallbackQuery)
 
-getSupportedUpdate :: [Update] -> MaybeUpdateContent
-getSupportedUpdate (update : updateList) = let {
+getSupportedUpdateContent :: [Update] -> MaybeUpdateContent
+getSupportedUpdateContent (update : updateList) = let {
     maybeMessage = message update;
+    chatID = id . (chat :: Message -> Chat) $ fromJust maybeMessage;
     maybeText = maybe Nothing (text :: Message -> Maybe Text) maybeMessage;
-    maybeUsername = maybe Nothing (fmap username . from) maybeMessage;
+    maybeUser = maybe Nothing from maybeMessage;
+    maybeUsername = maybe Nothing _username maybeUser;
+    --maybeUserID = maybe Nothing (_id :: User -> UserID) maybeUser;
+    userID = (_id :: User -> UserID) $ fromJust maybeUser;
     maybeCallbackQuery = callback_query update;
 } in if isJust maybeText && isJust maybeUsername
-    then Just $ Left (id . (chat :: Message -> Chat) $ fromJust maybeMessage, maybeText, maybeUsername)
-    else maybe (getSupportedUpdate updateList) (Just . Right) maybeCallbackQuery
-getSupportedUpdate [] = Nothing
+    then Just $ Left (
+        chatID,
+        fromJust maybeText,
+        fromJust maybeUsername,
+        userID
+    )
+    else maybe (getSupportedUpdateContent updateList) (Just . Right) maybeCallbackQuery
+getSupportedUpdateContent [] = Nothing
 
-getLatestSupportedUpdate :: ResponseJSON -> MaybeUpdateContent
-getLatestSupportedUpdate rjson = let {
+getLatestSupportedUpdateContent :: ResponseJSON -> MaybeUpdateContent
+getLatestSupportedUpdateContent rjson = let {
     updates = result rjson;
-} in getSupportedUpdate $ reverse updates
+} in getSupportedUpdateContent $ reverse updates
 
 
-isRepeat :: Maybe Text -> Bool
-isRepeat = (== Just "/repeat");
+isRepeatCommand :: Text -> Bool
+isRepeatCommand = (== "/repeat");
 
-isHelp :: Maybe Text -> Bool
-isHelp = (== Just "/help");
+isHelpCommand :: Text -> Bool
+isHelpCommand = (== "/help");
 
 getNumberOfRepeats :: Text -> Text
 getNumberOfRepeats "repeat5" = "5"
@@ -244,44 +256,49 @@ newtype AnswerCallbackRequest = AnswerCallbackRequest {
 instance ToJSON AnswerCallbackRequest
 
 answerCallbackQuery :: Config -> CallbackQuery -> IO ResponseStatusJSON
-answerCallbackQuery (tokenSection, _, _, _) callbackQuery = let {
+answerCallbackQuery (tokenSection, _, _, _, _) callbackQuery = let {
     apiMethod = "answerCallbackQuery";
     urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
-    body = ReqBodyJson $ AnswerCallbackRequest { callback_query_id = _id callbackQuery};
+    body = ReqBodyJson $ AnswerCallbackRequest { callback_query_id = (_id :: CallbackQuery -> Text)  callbackQuery};
     runReqMonad = req POST urlScheme body jsonResponse mempty >>=
         (\ response -> return (responseBody response :: ResponseStatusJSON));
 } in runReq defaultHttpConfig runReqMonad
 
 
+processUpdates :: Config -> ResponseJSON -> IO Config
+processUpdates config@(token, helpMsg, repeatMsg, echoRepeatNumberText, numberOfRepeatsMap) ioRJSON =
+    let {
+        latestSupportedUpdateContent = getLatestSupportedUpdateContent ioRJSON;
+    } in case latestSupportedUpdateContent of
+        Just (Left (chatID, msg, username, userID)) ->
+            let {
+                numberOfRepeats = if isRepeatCommand msg || isHelpCommand msg
+                    then 1
+                    else getInt $ M.findWithDefault echoRepeatNumberText userID numberOfRepeatsMap;
+            } in replicateM_ numberOfRepeats (respondToMessage config chatID msg username userID)
+            >> return config
+        -- https://core.telegram.org/bots/api#answercallbackquery
+        Just (Right callbackQuery) ->
+            void (answerCallbackQuery config callbackQuery)
+            >> let {
+                userID = (_id :: User -> UserID) $ _from callbackQuery;
+                newNumberOfRepeats = getNumberOfRepeats $ _data callbackQuery;
+                newNumberOfRepeatsMap = M.insert userID newNumberOfRepeats numberOfRepeatsMap;
+            } in return (token, helpMsg, repeatMsg, echoRepeatNumberText, newNumberOfRepeatsMap)
+        _ -> return config
+  
+
 cycleEcho' :: Config -> Maybe ResponseJSON -> IO ResponseJSON
-cycleEcho' config@(_, _, _, echoRepeatNumberText) maybeRJSON = let {
+cycleEcho' config maybeRJSON =
+    let {
         maybeOffset = maybe Nothing getUpdateId maybeRJSON;
     } in getUpdates config maybeOffset >>=
 
     \ ioRJSON -> debugM "trial-bot.bot" (show ioRJSON)
 
-    >> return (getLatestSupportedUpdate ioRJSON)
-    >>= \ latestSupportedUpdate -> debugM "trial-bot.bot" (show latestSupportedUpdate)
-    >> case latestSupportedUpdate of
-        Just (Left (chatID, maybeText, maybeUsername)) ->
-            let {
-                numberOfRepeats = if isRepeat maybeText || isHelp maybeText
-                    then 1
-                    else getInt echoRepeatNumberText;
-            } in replicateM_ numberOfRepeats $ respondToMessage config chatID maybeText maybeUsername
-        _ -> return ()
+    >> processUpdates config ioRJSON
 
-    -- https://core.telegram.org/bots/api#answercallbackquery
-    >> case latestSupportedUpdate of
-        Just (Right callbackQuery) -> void $ answerCallbackQuery config callbackQuery
-        _ -> return ()
-
-    >> let {
-        (tokenSection, helpMsg, repeatMsg, _) = config;
-        config' = case latestSupportedUpdate of
-            Just (Right callbackQuery) -> (tokenSection, helpMsg, repeatMsg, getNumberOfRepeats $ _data callbackQuery)
-            _ -> config;
-    } in cycleEcho' config' $ Just ioRJSON
+    >>= \ config' -> cycleEcho' config' $ Just ioRJSON
 
 cycleEcho :: Config -> IO ResponseJSON
 cycleEcho config = let {
@@ -296,7 +313,7 @@ processArgs [token, helpMsg, repeatMsg, echoRepeatNumberStr] = let {
     isInRange n = n > 0 && n < 6;
 } in if or [null token, null helpMsg, null repeatMsg, not $ isInRange echoRepeatNumber]
     then Nothing
-    else Just (append "bot" $ pack token, pack helpMsg, pack repeatMsg, pack echoRepeatNumberStr)
+    else Just (append "bot" $ pack token, pack helpMsg, pack repeatMsg, pack echoRepeatNumberStr, M.empty)
 processArgs _ = Nothing
 
 startBot :: [String] -> IO ()
