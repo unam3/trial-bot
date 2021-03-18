@@ -15,7 +15,8 @@ import Data.Maybe (isJust, fromJust)
 import Data.Text (Text, append, pack)
 import Data.Text.Read (decimal)
 import Prelude hiding (id)
-import System.Log.Logger (Priority (DEBUG, ERROR), debugM, setLevel, traplogging, updateGlobalLogger)
+import System.Log.Logger (Priority (DEBUG, ERROR), debugM, errorM, setLevel, traplogging, updateGlobalLogger)
+import System.Exit (exitFailure, exitSuccess)
 
 import Tg.Requests
 import Tg.Requests.JSON
@@ -125,9 +126,11 @@ startBot :: [String] -> IO ()
 startBot args =
     case args of
         [_, _, _, _] -> case processArgs args of
-            Just args' -> void $ cycleEcho args'
-            Nothing -> error "error: some argument passed from command line is wrong"
-        _ -> error "error: exactly four arguments needed: token, helpMsg, repeatMsg, echoRepeatNumber"
+            Just args' -> void $ cycleEcho args' >> exitSuccess
+            Nothing -> errorM "trial-bot.bot" "Some argument passed from command line is wrong."
+                >> exitFailure
+        _ -> errorM "trial-bot.bot" "Exactly four arguments needed: token, helpMsg, repeatMsg, echoRepeatNumber."
+                >> exitFailure
 
 
 startBotWithLogger :: [String] -> IO ()
