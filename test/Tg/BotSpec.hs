@@ -1,13 +1,14 @@
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Tg.BotSpec where
 
-import Tg (
-    getInt, getLatestSupportedUpdateContent, Chat (..), Message (..), ResponseJSON (..),
-    Update (..), User (..))
 import Data.Text (Text)
 import Prelude hiding (id)
 import Test.Hspec
+
+import Tg (getInt, getLatestSupportedUpdateContent)
+import Tg.Requests.JSON
 
 spec :: Spec
 spec = do
