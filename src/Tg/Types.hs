@@ -24,4 +24,10 @@ type NumberOfRepeats = Text
 
 type NumberOfRepeatsMap = Map UserID NumberOfRepeats
 
-type Config = (TokenSection, HelpMessage, RepeatMessage, NumberOfRepeats, NumberOfRepeatsMap)
+data Config = Config {
+    tokenSection :: TokenSection,
+    helpMessage :: HelpMessage,
+    repeatMessage :: RepeatMessage,
+    numberOfRepeats :: NumberOfRepeats,
+    numberOfRepeatsMap :: NumberOfRepeatsMap
+}

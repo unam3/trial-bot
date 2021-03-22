@@ -41,7 +41,6 @@ getSupportedUpdateContent (update : updateList) = let {
     maybeText = maybe Nothing (text :: Message -> Maybe Text) maybeMessage;
     maybeUser = maybe Nothing from maybeMessage;
     maybeUsername = maybe Nothing _username maybeUser;
-    --maybeUserID = maybe Nothing (_id :: User -> UserID) maybeUser;
     userID = (_id :: User -> UserID) $ fromJust maybeUser;
     maybeCallbackQuery = callback_query update;
 } in if isJust maybeText && isJust maybeUsername
@@ -72,25 +71,25 @@ getNumberOfRepeats _ = "1"
 
 
 processUpdates :: Config -> ResponseJSON -> IO Config
-processUpdates config@(token, helpMsg, repeatMsg, echoRepeatNumberText, numberOfRepeatsMap) ioRJSON =
+processUpdates config ioRJSON =
     let {
         latestSupportedUpdateContent = getLatestSupportedUpdateContent ioRJSON;
     } in case latestSupportedUpdateContent of
         Just (Left (chatID, msg, username, userID)) ->
             let {
-                numberOfRepeats = if isRepeatCommand msg || isHelpCommand msg
+                numberOfRepeats' = if isRepeatCommand msg || isHelpCommand msg
                     then 1
-                    else getInt $ M.findWithDefault echoRepeatNumberText userID numberOfRepeatsMap;
-            } in replicateM_ numberOfRepeats (respondToMessage config chatID msg username userID)
+                    else getInt $ M.findWithDefault (repeatMessage config) userID (numberOfRepeatsMap config);
+            } in replicateM_ numberOfRepeats' (respondToMessage config chatID msg username userID)
             >> return config
         -- https://core.telegram.org/bots/api#answercallbackquery
         Just (Right callbackQuery) ->
-            void (answerCallbackQuery config callbackQuery)
+            void (answerCallbackQuery (tokenSection config) callbackQuery)
             >> let {
                 userID = (_id :: User -> UserID) $ _from callbackQuery;
                 newNumberOfRepeats = getNumberOfRepeats $ _data callbackQuery;
-                newNumberOfRepeatsMap = M.insert userID newNumberOfRepeats numberOfRepeatsMap;
-            } in return (token, helpMsg, repeatMsg, echoRepeatNumberText, newNumberOfRepeatsMap)
+                newNumberOfRepeatsMap = M.insert userID newNumberOfRepeats (numberOfRepeatsMap config);
+            } in return config {numberOfRepeatsMap = newNumberOfRepeatsMap}
         _ -> return config
   
 
@@ -98,7 +97,7 @@ cycleEcho' :: Config -> Maybe ResponseJSON -> IO ResponseJSON
 cycleEcho' config maybeRJSON =
     let {
         maybeOffset = maybe Nothing getUpdateId maybeRJSON;
-    } in getUpdates config maybeOffset >>=
+    } in getUpdates (tokenSection config) maybeOffset >>=
 
     \ ioRJSON -> debugM "trial-bot.bot" (show ioRJSON)
 
@@ -119,7 +118,13 @@ processArgs [token, helpMsg, repeatMsg, echoRepeatNumberStr] = let {
     isInRange n = n > 0 && n < 6;
 } in if or [null token, null helpMsg, null repeatMsg, not $ isInRange echoRepeatNumber]
     then Nothing
-    else Just (append "bot" $ pack token, pack helpMsg, pack repeatMsg, pack echoRepeatNumberStr, M.empty)
+    else Just Config {
+        tokenSection = append "bot" $ pack token,
+        helpMessage = pack helpMsg,
+        repeatMessage = pack repeatMsg,
+        numberOfRepeats = pack echoRepeatNumberStr,
+        numberOfRepeatsMap = M.empty
+    }
 processArgs _ = Nothing
 
 startBot :: [String] -> IO ()

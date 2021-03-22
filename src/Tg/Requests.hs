@@ -19,10 +19,10 @@ import Tg.Types
 withUpdatesOffset :: Offset -> RequestJSON
 withUpdatesOffset updatesOffset = WithOffset {timeout = 20, offset = updatesOffset + 1}
 
-getUpdates :: Config -> Maybe Offset -> IO ResponseJSON
-getUpdates (tokenSection, _, _, _, _) maybeOffset = let {
+getUpdates :: TokenSection -> Maybe Offset -> IO ResponseJSON
+getUpdates tokenSection' maybeOffset = let {
     apiMethod = "getUpdates";
-    urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
+    urlScheme = https "api.telegram.org" /: tokenSection' /: apiMethod;
     body = ReqBodyJson $
         maybe (WithoutOffset {timeout = 20}) withUpdatesOffset maybeOffset;
     runReqMonad = req POST urlScheme body jsonResponse mempty >>=
@@ -34,14 +34,14 @@ isRepeatCommand :: Text -> Bool
 isRepeatCommand = (== "/repeat");
 
 respondToMessage :: Config -> ChatID -> Text -> Username -> UserID -> IO ResponseStatusJSON
-respondToMessage (tokenSection, helpMsg, repeatMsg, echoRepeatNumberText, numberOfRepeatsMap) chatID msg username userID = let {
+respondToMessage config chatID msg username userID = let {
     apiMethod = "sendMessage";
-    urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
-    echoRepeatNumber = findWithDefault echoRepeatNumberText userID numberOfRepeatsMap;
+    urlScheme = https "api.telegram.org" /: tokenSection config /: apiMethod;
+    echoRepeatNumber = findWithDefault (numberOfRepeats config) userID (numberOfRepeatsMap config);
     commandOrText :: Text -> Text;
-    commandOrText "/help" = helpMsg;
+    commandOrText "/help" = helpMessage config;
     commandOrText "/repeat" = mconcat [
-        "@", username, " Current number of repeats is ", echoRepeatNumber, ". ", repeatMsg
+        "@", username, " Current number of repeats is ", echoRepeatNumber, ". ", repeatMessage config
     ];
     commandOrText t = t;
     request = EchoRequest {
@@ -65,10 +65,10 @@ respondToMessage (tokenSection, helpMsg, repeatMsg, echoRepeatNumberText, number
 } in runReq defaultHttpConfig runReqM
 
 
-answerCallbackQuery :: Config -> CallbackQuery -> IO ResponseStatusJSON
-answerCallbackQuery (tokenSection, _, _, _, _) callbackQuery = let {
+answerCallbackQuery :: TokenSection -> CallbackQuery -> IO ResponseStatusJSON
+answerCallbackQuery tokenSection' callbackQuery = let {
     apiMethod = "answerCallbackQuery";
-    urlScheme = https "api.telegram.org" /: tokenSection /: apiMethod;
+    urlScheme = https "api.telegram.org" /: tokenSection' /: apiMethod;
     body = ReqBodyJson $ AnswerCallbackRequest { callback_query_id = (_id :: CallbackQuery -> Text)  callbackQuery};
     runReqMonad = req POST urlScheme body jsonResponse mempty >>=
         (\ response -> return (responseBody response :: ResponseStatusJSON));
