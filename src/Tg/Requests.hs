@@ -34,8 +34,7 @@ getUpdates tokenSection' maybeOffset = let {
     urlScheme = https "api.telegram.org" /: tokenSection' /: apiMethod;
     body = ReqBodyJson $
         maybe (WithoutOffset {timeout = 20}) withUpdatesOffset maybeOffset;
-} in makeRequest urlScheme body
-        >>= return . responseBody;
+} in responseBody <$> makeRequest urlScheme body
 
 
 isRepeatCommand :: Text -> Bool
@@ -68,8 +67,7 @@ respondToMessage config chatID msg username userID = let {
             else Nothing
     };
     body = ReqBodyJson request;
-} in makeRequest urlScheme body
-        >>= return . responseBody;
+} in responseBody <$> makeRequest urlScheme body
 
 
 answerCallbackQuery :: TokenSection -> CallbackQuery -> IO ResponseStatusJSON
@@ -77,6 +75,5 @@ answerCallbackQuery tokenSection' callbackQuery = let {
     apiMethod = "answerCallbackQuery";
     urlScheme = https "api.telegram.org" /: tokenSection' /: apiMethod;
     body = ReqBodyJson $ AnswerCallbackRequest { callback_query_id = (_id :: CallbackQuery -> Text)  callbackQuery};
-} in makeRequest urlScheme body
-        >>= return . responseBody;
+} in responseBody <$> makeRequest urlScheme body
 
