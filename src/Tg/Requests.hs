@@ -8,12 +8,21 @@ module Tg.Requests (
     respondToMessage
 ) where
 
+import Control.Monad.IO.Class (MonadIO)
+import Data.Aeson (FromJSON)
 import Data.Map.Strict (findWithDefault)
 import Data.Text (Text)
 import Network.HTTP.Req
 
 import Tg.Requests.JSON
 import Tg.Types
+
+
+makeRequest :: (HttpBody body, MonadIO m, FromJSON a) => Url scheme -> body -> m (JsonResponse a)
+makeRequest urlScheme body =
+    runReq
+        defaultHttpConfig
+        $ req POST urlScheme body jsonResponse mempty
 
 
 withUpdatesOffset :: Offset -> RequestJSON
@@ -25,9 +34,8 @@ getUpdates tokenSection' maybeOffset = let {
     urlScheme = https "api.telegram.org" /: tokenSection' /: apiMethod;
     body = ReqBodyJson $
         maybe (WithoutOffset {timeout = 20}) withUpdatesOffset maybeOffset;
-    runReqMonad = req POST urlScheme body jsonResponse mempty >>=
-        (\ response -> return (responseBody response :: ResponseJSON));
-} in runReq defaultHttpConfig runReqMonad
+} in makeRequest urlScheme body
+        >>= return . responseBody;
 
 
 isRepeatCommand :: Text -> Bool
@@ -60,9 +68,8 @@ respondToMessage config chatID msg username userID = let {
             else Nothing
     };
     body = ReqBodyJson request;
-    runReqM = req POST urlScheme body jsonResponse mempty >>=
-        (\ response -> return (responseBody response :: ResponseStatusJSON));
-} in runReq defaultHttpConfig runReqM
+} in makeRequest urlScheme body
+        >>= return . responseBody;
 
 
 answerCallbackQuery :: TokenSection -> CallbackQuery -> IO ResponseStatusJSON
@@ -70,7 +77,6 @@ answerCallbackQuery tokenSection' callbackQuery = let {
     apiMethod = "answerCallbackQuery";
     urlScheme = https "api.telegram.org" /: tokenSection' /: apiMethod;
     body = ReqBodyJson $ AnswerCallbackRequest { callback_query_id = (_id :: CallbackQuery -> Text)  callbackQuery};
-    runReqMonad = req POST urlScheme body jsonResponse mempty >>=
-        (\ response -> return (responseBody response :: ResponseStatusJSON));
-} in runReq defaultHttpConfig runReqMonad
+} in makeRequest urlScheme body
+        >>= return . responseBody;
 
