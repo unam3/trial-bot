@@ -3,15 +3,41 @@
 
 module Tg.BotSpec where
 
+import qualified Data.Map.Strict as M
 import Data.Text (Text)
 import Prelude hiding (id)
 import Test.Hspec
 
 import Tg (getInt, getLatestSupportedUpdateContent)
+import Tg.Types (Config(..))
+import Tg.Requests (commandOrText)
 import Tg.Requests.JSON
+
+testConfig :: Config
+testConfig = Config {
+    tokenSection = "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
+    helpMessage = "helpMessage",
+    repeatMessage = "repeatMessage",
+    numberOfRepeats = "1",
+    numberOfRepeatsMap = M.empty
+}
 
 spec :: Spec
 spec = do
+    describe "commandOrText" $ do
+        it "returns help message" $
+            shouldBe
+                (commandOrText testConfig "TESTUSERNAME" 123 "/help")
+                (helpMessage testConfig)
+        it "returns repeat message" $
+            shouldBe
+                (commandOrText testConfig "TESTUSERNAME" 123 "/repeat")
+                "@TESTUSERNAME Current number of repeats is 1. repeatMessage"
+        it "returns any other message as is" $
+            shouldBe
+                (commandOrText testConfig "TESTUSERNAME" 123 "/help as is")
+                "/help as is"
+
     describe "getInt" .
         it "returns Int" $ getInt ("5" :: Text) `shouldBe` (5 :: Int)
 

@@ -5,6 +5,7 @@ module Tg.Requests (
     answerCallbackQuery,
     getUpdates,
     isRepeatCommand,
+    commandOrText,
     respondToMessage
 ) where
 
@@ -40,19 +41,28 @@ getUpdates tokenSection' maybeOffset = let {
 isRepeatCommand :: Text -> Bool
 isRepeatCommand = (== "/repeat");
 
+
+commandOrText :: Config -> Username -> UserID -> Text -> Text
+commandOrText config _ _ "/help" = helpMessage config
+commandOrText config username userID "/repeat" = let {
+        echoRepeatNumber = findWithDefault (numberOfRepeats config) userID (numberOfRepeatsMap config);
+    } in mconcat [
+        "@",
+        username,
+        " Current number of repeats is ",
+        echoRepeatNumber,
+        ". ",
+        repeatMessage config
+    ]
+commandOrText _ _ _ t = t
+
+
 respondToMessage :: Config -> ChatID -> Text -> Username -> UserID -> IO ResponseStatusJSON
 respondToMessage config chatID msg username userID = let {
     apiMethod = "sendMessage";
     urlScheme = https "api.telegram.org" /: tokenSection config /: apiMethod;
-    echoRepeatNumber = findWithDefault (numberOfRepeats config) userID (numberOfRepeatsMap config);
-    commandOrText :: Text -> Text;
-    commandOrText "/help" = helpMessage config;
-    commandOrText "/repeat" = mconcat [
-        "@", username, " Current number of repeats is ", echoRepeatNumber, ". ", repeatMessage config
-    ];
-    commandOrText t = t;
     request = EchoRequest {
-        text = commandOrText msg,
+        text = commandOrText config username userID msg,
         chat_id = chatID,
         reply_markup = if isRepeatCommand msg 
             then let {

@@ -81,15 +81,15 @@ processUpdates config ioRJSON =
                     then 1
                     else getInt $ M.findWithDefault (repeatMessage config) userID (numberOfRepeatsMap config);
             } in replicateM_ numberOfRepeats' (respondToMessage config chatID msg username userID)
-            >> return config
+                >> return config
         -- https://core.telegram.org/bots/api#answercallbackquery
         Just (Right callbackQuery) ->
             void (answerCallbackQuery (tokenSection config) callbackQuery)
-            >> let {
-                userID = (_id :: User -> UserID) $ _from callbackQuery;
-                newNumberOfRepeats = getNumberOfRepeats $ _data callbackQuery;
-                newNumberOfRepeatsMap = M.insert userID newNumberOfRepeats (numberOfRepeatsMap config);
-            } in return config {numberOfRepeatsMap = newNumberOfRepeatsMap}
+                >> let {
+                    userID = (_id :: User -> UserID) $ _from callbackQuery;
+                    newNumberOfRepeats = getNumberOfRepeats $ _data callbackQuery;
+                    newNumberOfRepeatsMap = M.insert userID newNumberOfRepeats (numberOfRepeatsMap config);
+                } in return config {numberOfRepeatsMap = newNumberOfRepeatsMap}
         _ -> return config
   
 
@@ -97,13 +97,10 @@ cycleEcho' :: Config -> Maybe ResponseJSON -> IO ResponseJSON
 cycleEcho' config maybeRJSON =
     let {
         maybeOffset = maybe Nothing getUpdateId maybeRJSON;
-    } in getUpdates (tokenSection config) maybeOffset >>=
-
-    \ ioRJSON -> debugM "trial-bot.bot" (show ioRJSON)
-
-    >> processUpdates config ioRJSON
-
-    >>= \ config' -> cycleEcho' config' $ Just ioRJSON
+    } in getUpdates (tokenSection config) maybeOffset
+        >>= \ ioRJSON -> debugM "trial-bot.bot" (show ioRJSON)
+            >> processUpdates config ioRJSON
+                >>= \ config' -> cycleEcho' config' $ Just ioRJSON
 
 cycleEcho :: Config -> IO ResponseJSON
 cycleEcho config = let {
