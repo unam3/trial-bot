@@ -109,31 +109,27 @@ cycleEcho config = let {
     >> cycleEcho' config noRJSON
 
 
-processArgs :: [String] -> Maybe Config
+processArgs :: [String] -> Either String Config
 processArgs [token, helpMsg, repeatMsg, echoRepeatNumberStr] = let {
     echoRepeatNumber = (read echoRepeatNumberStr :: Int);
     isInRange n = n > 0 && n < 6;
 } in if or [null token, null helpMsg, null repeatMsg, not $ isInRange echoRepeatNumber]
-    then Nothing
-    else Just Config {
+    then Left "Some argument passed from command line is wrong."
+    else Right Config {
         tokenSection = append "bot" $ pack token,
         helpMessage = pack helpMsg,
         repeatMessage = pack repeatMsg,
         numberOfRepeats = pack echoRepeatNumberStr,
         numberOfRepeatsMap = M.empty
     }
-processArgs _ = Nothing
+processArgs _ = Left "Exactly four arguments needed: token, helpMsg, repeatMsg, echoRepeatNumber."
 
 startBot :: [String] -> IO ()
 startBot args =
-    case args of
-        [_, _, _, _] -> case processArgs args of
-            Just args' -> void $ cycleEcho args' >> exitSuccess
-            Nothing -> errorM "trial-bot.bot" "Some argument passed from command line is wrong."
+    case processArgs args of
+            Right args' -> void $ cycleEcho args' >> exitSuccess
+            Left errorMessage -> errorM "trial-bot.bot" errorMessage
                 >> exitFailure
-        _ -> errorM "trial-bot.bot" "Exactly four arguments needed: token, helpMsg, repeatMsg, echoRepeatNumber."
-                >> exitFailure
-
 
 startBotWithLogger :: [String] -> IO ()
 startBotWithLogger args = traplogging
