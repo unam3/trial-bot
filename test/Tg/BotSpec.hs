@@ -3,12 +3,13 @@
 
 module Tg.BotSpec where
 
+import Data.Either (isRight)
 import qualified Data.Map.Strict as M
 import Data.Text (Text)
 import Prelude hiding (id)
 import Test.Hspec
 
-import Tg (getInt, getLatestSupportedUpdateContent)
+import Tg (getInt, getLatestSupportedUpdateContent, processArgs)
 import Tg.Types (Config(..))
 import Tg.Requests (commandOrText)
 import Tg.Requests.JSON
@@ -24,6 +25,32 @@ testConfig = Config {
 
 spec :: Spec
 spec = do
+    describe "processArgs" $ do
+        it "returns config" $
+            shouldSatisfy
+                (processArgs ["123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11", "help msg", "repeat msg", "1"])
+                isRight
+        it "returns error if wrong number of arguments passed" $
+            shouldBe
+                (processArgs ["pluh"])
+                (Left "Exactly four arguments needed: token, helpMsg, repeatMsg, echoRepeatNumber.")
+        it "returns error if empty token" $
+            shouldBe
+                (processArgs ["", "help msg", "repeat msg", "1"])
+                (Left "Some argument passed from command line is wrong.")
+        it "returns error if empty help message" $
+            shouldBe
+                (processArgs ["123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11", "", "repeat msg", "1"])
+                (Left "Some argument passed from command line is wrong.")
+        it "returns error if empty repeat message" $
+            shouldBe
+                (processArgs ["123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11", "help msg", "", "1"])
+                (Left "Some argument passed from command line is wrong.")
+        it "returns error if wrong number of repeats" $
+            shouldBe
+                (processArgs ["123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11", "help msg", "repeat msg", "0"])
+                (Left "Some argument passed from command line is wrong.")
+
     describe "commandOrText" $ do
         it "returns help message" $
             shouldBe

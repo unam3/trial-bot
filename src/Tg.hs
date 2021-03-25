@@ -5,6 +5,7 @@ module Tg
     (
     getInt,
     getLatestSupportedUpdateContent,
+    processArgs,
     startBotWithLogger
     ) where
 

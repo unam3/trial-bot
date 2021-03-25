@@ -30,4 +30,4 @@ data Config = Config {
     repeatMessage :: RepeatMessage,
     numberOfRepeats :: NumberOfRepeats,
     numberOfRepeatsMap :: NumberOfRepeatsMap
-}
+} deriving (Show, Eq)
