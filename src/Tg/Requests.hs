@@ -26,15 +26,15 @@ makeRequest urlScheme body =
         $ req POST urlScheme body jsonResponse mempty
 
 
-withUpdatesOffset :: Offset -> RequestJSON
-withUpdatesOffset updatesOffset = WithOffset {timeout = 20, offset = updatesOffset + 1}
+withIncrementedUpdatesOffset :: Offset -> RequestJSON
+withIncrementedUpdatesOffset updatesOffset = WithOffset {timeout = 20, offset = updatesOffset + 1}
 
 getUpdates :: TokenSection -> Maybe Offset -> IO ResponseJSON
 getUpdates tokenSection' maybeOffset = let {
     apiMethod = "getUpdates";
     urlScheme = https "api.telegram.org" /: tokenSection' /: apiMethod;
     body = ReqBodyJson $
-        maybe (WithoutOffset {timeout = 20}) withUpdatesOffset maybeOffset;
+        maybe (WithoutOffset {timeout = 20}) withIncrementedUpdatesOffset maybeOffset;
 } in responseBody <$> makeRequest urlScheme body
 
 

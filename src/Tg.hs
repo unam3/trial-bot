@@ -24,8 +24,8 @@ import Tg.Requests.JSON
 import Tg.Types
 
 
-getUpdateId :: ResponseJSON -> Maybe Offset
-getUpdateId rjson = let {
+getLatestUpdateId :: ResponseJSON -> Maybe Offset
+getLatestUpdateId rjson = let {
     updates = result rjson;
 } in if null updates then Nothing else Just (update_id $ last updates)
 
@@ -35,8 +35,8 @@ getInt = fst . fromRight (1, "1") . decimal
 
 type MaybeUpdateContent = Maybe (Either (ChatID, Text, Username, UserID) CallbackQuery)
 
-getSupportedUpdateContent :: [Update] -> MaybeUpdateContent
-getSupportedUpdateContent (update : updateList) = let {
+getLatestSupportedUpdateContent' :: [Update] -> MaybeUpdateContent
+getLatestSupportedUpdateContent' (update : updateList) = let {
     maybeMessage = message update;
     chatID = id . (chat :: Message -> Chat) $ fromJust maybeMessage;
     maybeText = maybe Nothing (text :: Message -> Maybe Text) maybeMessage;
@@ -51,13 +51,13 @@ getSupportedUpdateContent (update : updateList) = let {
         fromJust maybeUsername,
         userID
     )
-    else maybe (getSupportedUpdateContent updateList) (Just . Right) maybeCallbackQuery
-getSupportedUpdateContent [] = Nothing
+    else maybe (getLatestSupportedUpdateContent' updateList) (Just . Right) maybeCallbackQuery
+getLatestSupportedUpdateContent' [] = Nothing
 
 getLatestSupportedUpdateContent :: ResponseJSON -> MaybeUpdateContent
 getLatestSupportedUpdateContent rjson = let {
     updates = result rjson;
-} in getSupportedUpdateContent $ reverse updates
+} in getLatestSupportedUpdateContent' $ reverse updates
 
 
 isHelpCommand :: Text -> Bool
@@ -73,9 +73,7 @@ getNumberOfRepeats _ = "1"
 
 processUpdates :: Config -> ResponseJSON -> IO Config
 processUpdates config ioRJSON =
-    let {
-        latestSupportedUpdateContent = getLatestSupportedUpdateContent ioRJSON;
-    } in case latestSupportedUpdateContent of
+    case getLatestSupportedUpdateContent ioRJSON of
         Just (Left (chatID, msg, username, userID)) ->
             let {
                 numberOfRepeats' = if isRepeatCommand msg || isHelpCommand msg
@@ -97,7 +95,7 @@ processUpdates config ioRJSON =
 cycleEcho' :: Config -> Maybe ResponseJSON -> IO ResponseJSON
 cycleEcho' config maybeRJSON =
     let {
-        maybeOffset = maybe Nothing getUpdateId maybeRJSON;
+        maybeOffset = maybe Nothing getLatestUpdateId maybeRJSON;
     } in getUpdates (tokenSection config) maybeOffset
         >>= \ ioRJSON -> debugM "trial-bot.bot" (show ioRJSON)
             >> processUpdates config ioRJSON
@@ -128,13 +126,13 @@ processArgs _ = Left "Exactly four arguments needed: token, helpMsg, repeatMsg, 
 startBot :: [String] -> IO ()
 startBot args =
     case processArgs args of
-            Right args' -> void $ cycleEcho args' >> exitSuccess
+            Right config -> void $ cycleEcho config >> exitSuccess
             Left errorMessage -> errorM "trial-bot.bot" errorMessage
                 >> exitFailure
 
 startBotWithLogger :: [String] -> IO ()
-startBotWithLogger args = traplogging
+startBotWithLogger = traplogging
     "trial-bot.main"
     ERROR
     "Bot shutdown due to"
-    $ startBot args
+    . startBot
