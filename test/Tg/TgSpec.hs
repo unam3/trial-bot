@@ -45,9 +45,8 @@ spec = do
 
     describe "getLatestSupportedUpdateContent" $ do
         let responseWithoutUpdates = (RJSON {ok = True, result = []})
-        it "returns Nothing" $ getLatestSupportedUpdateContent responseWithoutUpdates `shouldBe` Nothing
+        it "returns Nothing if no updates" $ getLatestSupportedUpdateContent responseWithoutUpdates `shouldBe` Nothing
 
-    describe "getLatestSupportedUpdateContent" $ do
         let responseWithUpdates = RJSON {
             ok = True,
             result = [
