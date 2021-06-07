@@ -78,9 +78,10 @@ processUpdates config ioRJSON =
             let {
                 numberOfRepeats' = if isRepeatCommand msg || isHelpCommand msg
                     then 1
-                    else getInt $ M.findWithDefault (repeatMessage config) userID (numberOfRepeatsMap config);
-            } in replicateM_ numberOfRepeats' (respondToMessage config chatID msg username userID)
-                >> return config
+                    else getInt $ M.findWithDefault (numberOfRepeats config) userID (numberOfRepeatsMap config);
+            } in print numberOfRepeats'
+                >> replicateM_ numberOfRepeats' (respondToMessage config chatID msg username userID)
+                    >> return config
         -- https://core.telegram.org/bots/api#answercallbackquery
         Just (Right callbackQuery) ->
             void (answerCallbackQuery (tokenSection config) callbackQuery)
@@ -98,14 +99,14 @@ cycleEcho' config maybeRJSON =
         maybeOffset = maybe Nothing getLatestUpdateId maybeRJSON;
     } in getUpdates (tokenSection config) maybeOffset
         >>= \ ioRJSON -> debugM "trial-bot.bot" (show ioRJSON)
+            >> print config
             >> processUpdates config ioRJSON
                 >>= \ config' -> cycleEcho' config' $ Just ioRJSON
 
 cycleEcho :: Config -> IO ResponseJSON
 cycleEcho config = let {
     noRJSON = Nothing;
-} in updateGlobalLogger "trial-bot.bot" (setLevel DEBUG)
-    >> cycleEcho' config noRJSON
+} in cycleEcho' config noRJSON
 
 
 processArgs :: [String] -> Either String Config
@@ -125,8 +126,12 @@ processArgs _ = Left "Exactly four arguments needed: token, helpMsg, repeatMsg, 
 
 startBot :: [String] -> IO ()
 startBot args =
-    case processArgs args of
-            Right config -> void $ cycleEcho config >> exitSuccess
+    updateGlobalLogger "trial-bot.bot" (setLevel DEBUG)
+        >> case processArgs args of
+            Right config ->
+                debugM "trial-bot.bot" "Bot is up and running."
+                    >> cycleEcho config
+                        >> exitSuccess
             Left errorMessage -> errorM "trial-bot.bot" errorMessage
                 >> exitFailure
 
@@ -134,5 +139,5 @@ startBotWithLogger :: [String] -> IO ()
 startBotWithLogger = traplogging
     "trial-bot.main"
     ERROR
-    "Bot shutdown due to"
+    "Bot was shutdown due to"
     . startBot
