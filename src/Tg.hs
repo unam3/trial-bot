@@ -79,8 +79,7 @@ processUpdates config ioRJSON =
                 numberOfRepeats' = if isRepeatCommand msg || isHelpCommand msg
                     then 1
                     else getInt $ M.findWithDefault (numberOfRepeats config) userID (numberOfRepeatsMap config);
-            } in print numberOfRepeats'
-                >> replicateM_ numberOfRepeats' (respondToMessage config chatID msg username userID)
+            } in replicateM_ numberOfRepeats' (respondToMessage config chatID msg username userID)
                     >> return config
         -- https://core.telegram.org/bots/api#answercallbackquery
         Just (Right callbackQuery) ->
@@ -99,7 +98,6 @@ cycleEcho' config maybeRJSON =
         maybeOffset = maybeRJSON >>= getLatestUpdateId;
     } in getUpdates (tokenSection config) maybeOffset
         >>= \ ioRJSON -> debugM "trial-bot.bot" (show ioRJSON)
-            >> print config
             >> processUpdates config ioRJSON
                 >>= \ config' -> cycleEcho' config' $ Just ioRJSON
 
