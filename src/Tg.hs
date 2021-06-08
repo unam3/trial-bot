@@ -126,18 +126,18 @@ processArgs _ = Left "Exactly four arguments needed: token, helpMsg, repeatMsg, 
 
 startBot :: [String] -> IO ()
 startBot args =
-    updateGlobalLogger "trial-bot.bot" (setLevel DEBUG)
-        >> case processArgs args of
-            Right config ->
-                debugM "trial-bot.bot" "Bot is up and running."
-                    >> cycleEcho config
-                        >> exitSuccess
-            Left errorMessage -> errorM "trial-bot.bot" errorMessage
-                >> exitFailure
+    case processArgs args of
+        Right config ->
+            debugM "trial-bot.bot" "Bot is up and running."
+                >> cycleEcho config
+                    >> exitSuccess
+        Left errorMessage -> errorM "trial-bot.bot" errorMessage
+            >> exitFailure
 
 startBotWithLogger :: [String] -> IO ()
-startBotWithLogger = traplogging
+startBotWithLogger args = traplogging
     "trial-bot.main"
     ERROR
     "Bot was shutdown due to"
-    . startBot
+    $ updateGlobalLogger "trial-bot.bot" (setLevel DEBUG)
+        >> startBot args
