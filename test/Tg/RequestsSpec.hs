@@ -20,7 +20,7 @@ testConfig = Config {
 }
 
 spec :: Spec
-spec = do
+spec =
     describe "commandOrText" $ do
         it "returns help message" $
             shouldBe

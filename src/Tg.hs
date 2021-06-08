@@ -39,9 +39,9 @@ getLatestSupportedUpdateContent' :: [Update] -> MaybeUpdateContent
 getLatestSupportedUpdateContent' (update : updateList) = let {
     maybeMessage = message update;
     chatID = id . (chat :: Message -> Chat) $ fromJust maybeMessage;
-    maybeText = maybe Nothing (text :: Message -> Maybe Text) maybeMessage;
-    maybeUser = maybe Nothing from maybeMessage;
-    maybeUsername = maybe Nothing _username maybeUser;
+    maybeText = maybeMessage >>= (text :: Message -> Maybe Text);
+    maybeUser = maybeMessage >>= from;
+    maybeUsername = maybeUser >>= _username;
     userID = (_id :: User -> UserID) $ fromJust maybeUser;
     maybeCallbackQuery = callback_query update;
 } in if isJust maybeText && isJust maybeUsername
@@ -96,7 +96,7 @@ processUpdates config ioRJSON =
 cycleEcho' :: Config -> Maybe ResponseJSON -> IO ResponseJSON
 cycleEcho' config maybeRJSON =
     let {
-        maybeOffset = maybe Nothing getLatestUpdateId maybeRJSON;
+        maybeOffset = maybeRJSON >>= getLatestUpdateId;
     } in getUpdates (tokenSection config) maybeOffset
         >>= \ ioRJSON -> debugM "trial-bot.bot" (show ioRJSON)
             >> print config
