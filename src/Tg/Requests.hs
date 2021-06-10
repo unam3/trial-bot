@@ -1,13 +1,13 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Tg.Requests (
-    answerCallbackQuery,
-    getUpdates,
-    isRepeatCommand,
-    commandOrText,
-    respondToMessage
-) where
+module Tg.Requests
+  ( answerCallbackQuery
+  , getUpdates
+  , isRepeatCommand
+  , commandOrText
+  , respondToMessage
+  ) where
 
 import Control.Monad.IO.Class (MonadIO)
 import Data.Aeson (FromJSON)
@@ -18,72 +18,87 @@ import Network.HTTP.Req
 import Tg.Requests.JSON
 import Tg.Types
 
-
-makeRequest :: (HttpBody body, MonadIO m, FromJSON a) => Url scheme -> body -> m (JsonResponse a)
+makeRequest ::
+     (HttpBody body, MonadIO m, FromJSON a)
+  => Url scheme
+  -> body
+  -> m (JsonResponse a)
 makeRequest urlScheme body =
-    runReq
-        defaultHttpConfig
-        $ req POST urlScheme body jsonResponse mempty
-
+  runReq defaultHttpConfig $ req POST urlScheme body jsonResponse mempty
 
 withIncrementedUpdatesOffset :: Offset -> RequestJSON
-withIncrementedUpdatesOffset updatesOffset = WithOffset {timeout = 20, offset = updatesOffset + 1}
+withIncrementedUpdatesOffset updatesOffset =
+  WithOffset {timeout = 20, offset = updatesOffset + 1}
 
 getUpdates :: TokenSection -> Maybe Offset -> IO ResponseJSON
-getUpdates tokenSection' maybeOffset = let {
-    apiMethod = "getUpdates";
-    urlScheme = https "api.telegram.org" /: tokenSection' /: apiMethod;
-    body = ReqBodyJson $
-        maybe (WithoutOffset {timeout = 20}) withIncrementedUpdatesOffset maybeOffset;
-} in responseBody <$> makeRequest urlScheme body
-
+getUpdates tokenSection' maybeOffset =
+  let apiMethod = "getUpdates"
+      urlScheme = https "api.telegram.org" /: tokenSection' /: apiMethod
+      body =
+        ReqBodyJson $
+        maybe
+          (WithoutOffset {timeout = 20})
+          withIncrementedUpdatesOffset
+          maybeOffset
+   in responseBody <$> makeRequest urlScheme body
 
 isRepeatCommand :: Text -> Bool
-isRepeatCommand = (== "/repeat");
-
+isRepeatCommand = (== "/repeat")
 
 commandOrText :: Config -> Username -> UserID -> Text -> Text
 commandOrText config _ _ "/help" = helpMessage config
-commandOrText config username userID "/repeat" = let {
-        echoRepeatNumber = findWithDefault (numberOfRepeats config) userID (numberOfRepeatsMap config);
-    } in mconcat [
-        "@",
-        username,
-        " Current number of repeats is ",
-        echoRepeatNumber,
-        ". ",
-        repeatMessage config
-    ]
+commandOrText config username userID "/repeat" =
+  let echoRepeatNumber =
+        findWithDefault
+          (numberOfRepeats config)
+          userID
+          (numberOfRepeatsMap config)
+   in mconcat
+        [ "@"
+        , username
+        , " Current number of repeats is "
+        , echoRepeatNumber
+        , ". "
+        , repeatMessage config
+        ]
 commandOrText _ _ _ t = t
 
-
-respondToMessage :: Config -> ChatID -> Text -> Username -> UserID -> IO ResponseStatusJSON
-respondToMessage config chatID msg username userID = let {
-    apiMethod = "sendMessage";
-    urlScheme = https "api.telegram.org" /: tokenSection config /: apiMethod;
-    request = EchoRequest {
-        text = commandOrText config username userID msg,
-        chat_id = chatID,
-        reply_markup = if isRepeatCommand msg 
-            then let {
-                buttons = [[
-                    InlineKeyboardButton {text = "1", callback_data = "repeat1"},
-                    InlineKeyboardButton {text = "2", callback_data = "repeat2"},
-                    InlineKeyboardButton {text = "3", callback_data = "repeat3"},
-                    InlineKeyboardButton {text = "4", callback_data = "repeat4"},
-                    InlineKeyboardButton {text = "5", callback_data = "repeat5"}
-                ]];
-            } in Just InlineKeyboardMarkup {inline_keyboard = buttons}
-            else Nothing
-    };
-    body = ReqBodyJson request;
-} in responseBody <$> makeRequest urlScheme body
-
+respondToMessage ::
+     Config -> ChatID -> Text -> Username -> UserID -> IO ResponseStatusJSON
+respondToMessage config chatID msg username userID =
+  let apiMethod = "sendMessage"
+      urlScheme = https "api.telegram.org" /: tokenSection config /: apiMethod
+      request =
+        EchoRequest
+          { text = commandOrText config username userID msg
+          , chat_id = chatID
+          , reply_markup =
+              if isRepeatCommand msg
+                then let buttons =
+                           [ [ InlineKeyboardButton
+                                 {text = "1", callback_data = "repeat1"}
+                             , InlineKeyboardButton
+                                 {text = "2", callback_data = "repeat2"}
+                             , InlineKeyboardButton
+                                 {text = "3", callback_data = "repeat3"}
+                             , InlineKeyboardButton
+                                 {text = "4", callback_data = "repeat4"}
+                             , InlineKeyboardButton
+                                 {text = "5", callback_data = "repeat5"}
+                             ]
+                           ]
+                      in Just InlineKeyboardMarkup {inline_keyboard = buttons}
+                else Nothing
+          }
+      body = ReqBodyJson request
+   in responseBody <$> makeRequest urlScheme body
 
 answerCallbackQuery :: TokenSection -> CallbackQuery -> IO ResponseStatusJSON
-answerCallbackQuery tokenSection' callbackQuery = let {
-    apiMethod = "answerCallbackQuery";
-    urlScheme = https "api.telegram.org" /: tokenSection' /: apiMethod;
-    body = ReqBodyJson $ AnswerCallbackRequest { callback_query_id = (_id :: CallbackQuery -> Text)  callbackQuery};
-} in responseBody <$> makeRequest urlScheme body
-
+answerCallbackQuery tokenSection' callbackQuery =
+  let apiMethod = "answerCallbackQuery"
+      urlScheme = https "api.telegram.org" /: tokenSection' /: apiMethod
+      body =
+        ReqBodyJson $
+        AnswerCallbackRequest
+          {callback_query_id = (_id :: CallbackQuery -> Text) callbackQuery}
+   in responseBody <$> makeRequest urlScheme body
