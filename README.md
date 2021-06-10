@@ -29,5 +29,6 @@ stack exec trial-bot-exe "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" "help msg" 
 
 ## Constraints
 
-It's assumed that trial-bot will be used only in one private chat.
+Repeat number will be same for the user in all chats with bot.
+
 Only latest text message (from [updates](https://core.telegram.org/bots/api#getting-updates)) will be processed.
