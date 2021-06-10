@@ -29,7 +29,6 @@ dependencies:
 
 ghc-options:
 - -Wall
-- -Werror
 - -threaded
 
 library:

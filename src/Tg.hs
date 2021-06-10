@@ -16,9 +16,10 @@ import Data.Maybe (isJust, fromJust)
 import Data.Text (Text, append, pack)
 import Data.Text.Read (decimal)
 import Prelude hiding (id)
-import System.Log.Logger (Priority (DEBUG, ERROR), debugM, errorM, setLevel, traplogging, updateGlobalLogger)
+import System.Log.Logger (Priority (DEBUG, ERROR), debugM, errorM, infoM, setLevel, traplogging, updateGlobalLogger)
 import System.Exit (exitFailure, exitSuccess)
 
+import qualified Tg.Logger as L
 import Tg.Requests
 import Tg.Requests.JSON
 import Tg.Types
@@ -92,19 +93,19 @@ processUpdates config ioRJSON =
         _ -> return config
   
 
-cycleEcho' :: Config -> Maybe ResponseJSON -> IO ResponseJSON
-cycleEcho' config maybeRJSON =
+cycleEcho' :: L.Handle () -> Config -> Maybe ResponseJSON -> IO ResponseJSON
+cycleEcho' loggerH config maybeRJSON =
     let {
         maybeOffset = maybeRJSON >>= getLatestUpdateId;
     } in getUpdates (tokenSection config) maybeOffset
-        >>= \ ioRJSON -> debugM "trial-bot.bot" (show ioRJSON)
+        >>= \ ioRJSON -> L.hDebug loggerH (show ioRJSON)
             >> processUpdates config ioRJSON
-                >>= \ config' -> cycleEcho' config' $ Just ioRJSON
+                >>= \ config' -> cycleEcho' loggerH config' $ Just ioRJSON
 
-cycleEcho :: Config -> IO ResponseJSON
-cycleEcho config = let {
+cycleEcho :: L.Handle () -> Config -> IO ResponseJSON
+cycleEcho loggerH config = let {
     noRJSON = Nothing;
-} in cycleEcho' config noRJSON
+} in cycleEcho' loggerH config noRJSON
 
 
 processArgs :: [String] -> Either String Config
@@ -122,20 +123,28 @@ processArgs [token, helpMsg, repeatMsg, echoRepeatNumberStr] = let {
     }
 processArgs _ = Left "Exactly four arguments needed: token, helpMsg, repeatMsg, echoRepeatNumber."
 
-startBot :: [String] -> IO ()
-startBot args =
+startBot :: L.Handle () -> [String] -> IO ()
+startBot loggerH args =
     case processArgs args of
         Right config ->
-            debugM "trial-bot.bot" "Bot is up and running."
-                >> cycleEcho config
+            L.hInfo loggerH "Bot is up and running."
+                >> cycleEcho loggerH config
                     >> exitSuccess
-        Left errorMessage -> errorM "trial-bot.bot" errorMessage
+        Left errorMessage -> L.hError loggerH errorMessage
             >> exitFailure
 
 startBotWithLogger :: [String] -> IO ()
-startBotWithLogger args = traplogging
-    "trial-bot.main"
-    ERROR
-    "Bot was shutdown due to"
-    $ updateGlobalLogger "trial-bot.bot" (setLevel DEBUG)
-        >> startBot args
+startBotWithLogger args =
+    do L.withLogger
+            (L.Config
+                -- use INFO, DEBUG or ERROR here
+                -- (add to System.Log.Logger import items if missed)
+                DEBUG
+                (traplogging "trial-bot" ERROR "Unhandled exception occured" .
+                    updateGlobalLogger "trial-bot" . setLevel)
+                (debugM "trial-bot")
+                (infoM "trial-bot")
+                (errorM "trial-bot")
+                )
+            ( \loggerH -> startBot loggerH args)
+       pure ()
